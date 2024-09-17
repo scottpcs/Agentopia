@@ -69,3 +69,63 @@
   font-weight: bold;
   margin-bottom: 10px;
 }
+
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  background-color: #f9f9f9;
+  min-width: 160px;
+  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+  z-index: 1;
+}
+
+.dropdown:hover .dropdown-content {
+  display: block;
+}
+
+.dropdown-content button {
+  color: black;
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+}
+
+.dropdown-content button:hover {
+  background-color: #f1f1f1;
+}
+
+.workspace-manager {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: white;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
+
+.recent-workspaces,
+.recent-files {
+  margin-top: 10px;
+}
+
+.recent-workspaces h4,
+.recent-files span {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.recent-workspaces button,
+.recent-files button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 5px;
+}
