@@ -2,7 +2,7 @@
 
 const API_URL = 'https://api.openai.com/v1/chat/completions';
 
-export const callOpenAI = async (apiKey, model, messages, temperature, maxTokens) => {
+export async function callOpenAI(apiKey, model, messages, temperature, maxTokens) {
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -28,4 +28,4 @@ export const callOpenAI = async (apiKey, model, messages, temperature, maxTokens
     console.error('Error calling OpenAI API:', error);
     throw error;
   }
-};
+}
