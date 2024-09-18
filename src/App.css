@@ -12,7 +12,7 @@
 }
 
 .toolbar {
-  width: 200px;
+  width: 150px;
   background-color: #f0f0f0;
   border-right: 1px solid #ccc;
   padding: 10px;
@@ -28,7 +28,6 @@
   padding: 10px;
   border-radius: 3px;
   width: 150px;
-  font-size: 12px;
   color: #222;
   text-align: center;
   border-width: 1px;
@@ -58,6 +57,7 @@
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  font-size: 0.75rem;
 }
 
 .toolbar-button:hover {
@@ -65,7 +65,7 @@
 }
 
 .toolbar-section-title {
-  font-size: 16px;
+  font-size: 0.875rem;
   font-weight: bold;
   margin-bottom: 10px;
 }
@@ -78,10 +78,12 @@
 .dropdown-content {
   display: none;
   position: absolute;
-  background-color: #f9f9f9;
+  background-color: white;  /* Changed to white */
   min-width: 160px;
   box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
   z-index: 1;
+  border: 1px solid #ccc;  /* Added border for definition */
+  border-radius: 4px;  /* Rounded corners */
 }
 
 .dropdown:hover .dropdown-content {
@@ -89,14 +91,19 @@
 }
 
 .dropdown-content button {
-  color: black;
+  color: #333;  /* Darker text color for better contrast */
+  background-color: white;  /* Ensure buttons have white background */
   padding: 12px 16px;
   text-decoration: none;
   display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  cursor: pointer;
 }
 
 .dropdown-content button:hover {
-  background-color: #f1f1f1;
+  background-color: #f1f1f1;  /* Light grey background on hover */
 }
 
 .workspace-manager {
@@ -128,4 +135,68 @@
   width: 100%;
   text-align: left;
   margin-bottom: 5px;
+}
+
+/* Styles for the property panel */
+.property-panel {
+  font-size: 0.75rem;
+}
+
+.property-panel input,
+.property-panel select,
+.property-panel textarea {
+  font-size: 0.75rem;
+  width: 100%;
+  padding: 0.25rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.property-panel label {
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+/* Styles for the agent node */
+.agent-node {
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  background-color: white;
+  width: 150px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.agent-node-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.agent-node-label {
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.agent-node-model {
+  font-size: 10px;
+  color: #666;
+}
+
+/* Adjust the handle positions */
+.agent-node .react-flow__handle {
+  width: 6px;
+  height: 6px;
+  background-color: #555;
+}
+
+.agent-node .react-flow__handle-top {
+  top: -3px;
+}
+
+.agent-node .react-flow__handle-bottom {
+  bottom: -3px;
 }

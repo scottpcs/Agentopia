@@ -11,6 +11,7 @@ import 'reactflow/dist/style.css';
 import MenuBar from './components/MenuBar';
 import Toolbar from './components/Toolbar';
 import AgentNode from './components/AgentNode';
+import PropertyPanel from './components/PropertyPanel';
 import WorkspaceManager from './components/WorkspaceManager';
 import './App.css';
 
@@ -33,6 +34,7 @@ const AiWorkflowPOC = () => {
   const [recentWorkspaces, setRecentWorkspaces] = useState([]);
   const [recentFiles, setRecentFiles] = useState([]);
   const [showWorkspaceManager, setShowWorkspaceManager] = useState(false);
+  const [selectedNode, setSelectedNode] = useState(null);
 
   useEffect(() => {
     const storedWorkspaces = JSON.parse(localStorage.getItem('recentWorkspaces') || '[]');
@@ -68,21 +70,53 @@ const AiWorkflowPOC = () => {
     if (nodeType === 'agent') {
       newNode.data = {
         ...newNode.data,
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4-mini', // Default model set to GPT-4o mini
         systemMessage: '',
         temperature: 0.7,
         maxTokens: 150,
+        apiKey: '',
       };
     }
 
     setNodes((nds) => nds.concat(newNode));
   }, [reactFlowInstance, setNodes]);
 
+  const onNodeChange = useCallback((nodeId, newData) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              ...newData,
+            },
+          };
+        }
+        return node;
+      })
+    );
+    // Update the selectedNode state to reflect the changes
+    setSelectedNode((prev) => {
+      if (prev && prev.id === nodeId) {
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            ...newData,
+          },
+        };
+      }
+      return prev;
+    });
+  }, [setNodes]);
+
   const onNodesDelete = useCallback(
     (deleted) => {
       setEdges((eds) => eds.filter((edge) => 
         !deleted.some((node) => node.id === edge.source || node.id === edge.target)
       ));
+      setSelectedNode(null);
     },
     [setEdges]
   );
@@ -181,6 +215,18 @@ const AiWorkflowPOC = () => {
     onOpen();
   }, [onOpen]);
 
+  const onNodeClick = useCallback((event, node) => {
+    setSelectedNode(node);
+  }, []);
+
+  const onPanelClose = useCallback(() => {
+    setSelectedNode(null);
+  }, []);
+
+  const onBackgroundClick = useCallback(() => {
+    setSelectedNode(null);
+  }, []);
+
   return (
     <div className="app-container">
       <MenuBar 
@@ -211,6 +257,8 @@ const AiWorkflowPOC = () => {
             nodeTypes={nodeTypes}
             onNodesDelete={onNodesDelete}
             onEdgesDelete={onEdgesDelete}
+            onNodeClick={onNodeClick}
+            onPaneClick={onBackgroundClick}
             deleteKeyCode={['Backspace', 'Delete']}
             fitView
           >
@@ -219,6 +267,15 @@ const AiWorkflowPOC = () => {
             <Background variant="dots" gap={12} size={1} />
           </ReactFlow>
         </div>
+        {selectedNode && (
+          <div className="w-96"> {/* Adjusted width to match PropertyPanel */}
+            <PropertyPanel
+              node={selectedNode}
+              onChange={onNodeChange}
+              onClose={onPanelClose}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
