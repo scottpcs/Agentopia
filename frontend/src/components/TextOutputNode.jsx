@@ -1,3 +1,16 @@
+/**
+ * TextOutputNode.jsx
+ * 
+ * This component represents a text output node in the workflow.
+ * It displays the output text from AI agents or other operations.
+ * 
+ * Props:
+ * - data: Object containing the node's data (including output text)
+ * - isConnectable: Boolean indicating if the node can be connected
+ * 
+ * @component
+ */
+
 import React from 'react';
 import { Handle, Position } from 'reactflow';
 

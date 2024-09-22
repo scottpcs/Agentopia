@@ -1,3 +1,17 @@
+/**
+ * AgentNode.jsx
+ * 
+ * This component represents an AI agent node in the workflow.
+ * It displays the agent's label and model, and handles connections
+ * to other nodes.
+ * 
+ * Props:
+ * - data: Object containing the node's data (label, model, etc.)
+ * - isConnectable: Boolean indicating if the node can be connected
+ * 
+ * @component
+ */
+
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 

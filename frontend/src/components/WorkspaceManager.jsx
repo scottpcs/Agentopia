@@ -1,3 +1,17 @@
+/**
+ * WorkspaceManager.jsx
+ * 
+ * This component manages the workspace selection and recent workspaces.
+ * It allows users to set a new workspace or select from recent ones.
+ * 
+ * Props:
+ * - onSetWorkspace: Function to set the current workspace
+ * - recentWorkspaces: Array of recent workspace paths
+ * - onSelectRecentWorkspace: Function to select a recent workspace
+ * 
+ * @component
+ */
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";

@@ -1,3 +1,16 @@
+/**
+ * TextInputNode.jsx
+ * 
+ * This component represents a text input node in the workflow.
+ * It allows users to enter text that can be used as input for AI agents.
+ * 
+ * Props:
+ * - data: Object containing the node's data
+ * - isConnectable: Boolean indicating if the node can be connected
+ * 
+ * @component
+ */
+
 import React, { useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { Input } from "./ui/input";

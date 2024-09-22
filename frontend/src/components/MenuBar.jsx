@@ -1,3 +1,23 @@
+/**
+ * MenuBar.jsx
+ * 
+ * This component renders the top menu bar of the application.
+ * It provides options for file operations, workspace management,
+ * and workflow execution.
+ * 
+ * Props:
+ * - onSave: Function to handle saving the workflow
+ * - onOpen: Function to handle opening a workflow
+ * - onSetWorkspace: Function to set the current workspace
+ * - recentFiles: Array of recent file paths
+ * - onOpenRecentFile: Function to open a recent file
+ * - currentWorkspace: String representing the current workspace path
+ * - onExecuteWorkflow: Function to execute the current workflow
+ * - isExecuting: Boolean indicating if a workflow is currently executing
+ * 
+ * @component
+ */
+
 import React from 'react';
 import { Button } from "./ui/button";
 

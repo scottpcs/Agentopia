@@ -1,3 +1,15 @@
+/**
+ * Toolbar.jsx
+ * 
+ * This component renders the toolbar on the left side of the application.
+ * It provides buttons for adding different types of nodes to the workflow.
+ * 
+ * Props:
+ * - onAddNode: Function to handle adding a new node to the workflow
+ * 
+ * @component
+ */
+
 import React from 'react';
 import { Button } from "./ui/button";
 

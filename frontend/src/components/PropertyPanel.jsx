@@ -1,3 +1,17 @@
+/**
+ * PropertyPanel.jsx
+ * 
+ * This component displays and allows editing of a selected node's properties.
+ * It appears as a side panel when a node is selected in the workflow.
+ * 
+ * Props:
+ * - node: Object representing the selected node
+ * - onChange: Function to handle changes to node properties
+ * - onClose: Function to close the property panel
+ * 
+ * @component
+ */
+
 import React from 'react';
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
