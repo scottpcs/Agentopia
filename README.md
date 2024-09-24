@@ -2,13 +2,6 @@
 
 Agentopia is a React-based web application that provides a graphical user interface for organizing workflows involving multiple AI agents. It allows users to visually create, connect, and manage AI agent nodes in a flow-based interface, enabling complex, multi-step AI interactions.
 
-## Project Structure
-
-The project is organized into two main parts:
-
-- `frontend/`: Contains the React application built with Vite and Tailwind CSS
-- `backend/`: Contains the Express.js server that handles API requests
-
 ## Features
 
 - Visual representation of AI agent workflows
@@ -17,77 +10,75 @@ The project is organized into two main parts:
 - Customizable node properties (e.g., AI model selection, system messages)
 - Save and load functionality for workflows
 - Real-time execution of AI workflows
+- Secure API key management
+- Workspace management for organizing multiple workflows
 
-## Technologies Used
+## Project Structure
 
-- Frontend:
-  - React
-  - Vite
-  - Tailwind CSS
-  - React Flow (for node-based interface)
-- Backend:
-  - Express.js
-  - Node.js
-- API Integration:
-  - OpenAI API
+The project is organized into two main parts:
+
+1. Frontend (React application)
+2. Backend (Express.js server)
+
+### Frontend
+
+The frontend is built with React and uses React Flow for the node-based interface. It's styled with Tailwind CSS and built using Vite.
+
+### Backend
+
+The backend is an Express.js server that handles API key management and proxies requests to the OpenAI API.
+
+## Prerequisites
+
+- Node.js (v14 or later)
+- npm (v6 or later)
 
 ## Setup and Installation
 
 1. Clone the repository:
 git clone https://github.com/your-username/agentopia.git
 cd agentopia
-
+ 
 2. Install dependencies:
 npm install
 cd frontend && npm install
 cd ../backend && npm install
-
+Copy
 3. Set up environment variables:
 - Create a `.env` file in the `backend` directory
-- Add your OpenAI API key:
+- Add the following variables:
   ```
-  OPENAI_API_KEY=your_api_key_here
+  PORT=3000
+  OPENAI_API_KEY=your_openai_api_key_here
   ```
 
 ## Running the Application
 
-From the root directory, run:
+1. Start the backend server:
+cd backend
 npm start
-
-This will start both the frontend and backend servers concurrently.
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3000
+Copy
+2. In a new terminal, start the frontend development server:
+cd frontend
+npm run dev
+Copy
+3. Open your browser and navigate to `http://localhost:5173` (or the port specified by Vite)
 
 ## Usage
 
-1. Open the application in your web browser
-2. Use the toolbar to add different types of nodes to the canvas
-3. Connect nodes by dragging from one node's output to another node's input
-4. Configure node properties by clicking on a node and using the property panel
+1. Use the toolbar to add different types of nodes to the canvas (Agent, TextInput, TextOutput)
+2. Connect nodes by dragging from one node's output to another node's input
+3. Configure node properties by clicking on a node and using the property panel
+4. Save and load workflows using the File menu
 5. Execute the workflow using the "Execute Workflow" button in the menu bar
-6. Save and load workflows using the File menu
-
-## Configuration
-
-- OpenAI API: Ensure your API key is set in the backend `.env` file
-- Port configuration: The backend port can be changed in `backend/server.js`
 
 ## Contributing
 
-We welcome contributions to Agentopia! Please follow these steps to contribute:
-
-1. Fork the repository
-2. Create a new branch: `git checkout -b feature-branch-name`
-3. Make your changes and commit them: `git commit -m 'Add some feature'`
-4. Push to the branch: `git push origin feature-branch-name`
-5. Submit a pull request
-
-For major changes, please open an issue first to discuss what you would like to change.
+We welcome contributions to Agentopia! Please see our [Contributing Guide](CONTRIBUTING.md) for more details on how to get started.
 
 ## License
 
-[MIT License](https://opensource.org/licenses/MIT)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgements
 

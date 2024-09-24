@@ -1,20 +1,18 @@
 // src/services/openaiService.js
 
-const API_URL = 'https://api.openai.com/v1/chat/completions';
-
-export async function callOpenAI(apiKey, model, messages, temperature, maxTokens) {
+export async function callOpenAI(keyId, model, messages, temperature, maxTokens) {
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch('http://localhost:3000/api/openai', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
+        keyId,
         model,
         messages,
         temperature,
-        max_tokens: maxTokens,
+        maxTokens,
       }),
     });
 

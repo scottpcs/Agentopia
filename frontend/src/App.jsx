@@ -1,20 +1,4 @@
-/**
- * App.jsx
- * 
- * This file is the main component for the Agentopia AI Workflow application.
- * It manages the overall state and layout of the application, including:
- * - Node and edge management for the workflow
- * - Workspace and file operations
- * - Workflow execution logic
- * - UI components integration (MenuBar, Toolbar, PropertyPanel, etc.)
- * 
- * The application allows users to create, edit, and execute AI workflows
- * using a visual node-based interface built with React Flow.
- * 
- * @copyright 2024 Scott Thielman
- * @author Scott Thielman
- * @contributors Claude 3.5 Sonnet (Anthropic AI assistant)
- */
+// src/App.jsx
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
@@ -37,38 +21,25 @@ import PropertyPanel from './components/PropertyPanel';
 import WorkspaceManager from './components/WorkspaceManager';
 
 // Service imports
-import { callOpenAI } from './services/openaiService.js';
+import { callOpenAI } from './services/openaiService';
 
 // Styles
 import './App.css';
 
-// ----------------
 // Utility Functions
-// ----------------
-
 function normalizePath(path) {
   return path.replace(/\\/g, '/').replace(/\/+/g, '/');
 }
 
-// ----------------
 // Node Type Definitions
-// ----------------
-
 const nodeTypes = {
   agent: AgentNode,
   textInput: TextInputNode,
   textOutput: TextOutputNode,
 };
 
-// ----------------
-// Main Component
-// ----------------
-
 const AiWorkflowPOC = () => {
-  // ----------------
   // State Declarations
-  // ----------------
-
   const reactFlowWrapper = useRef(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -81,10 +52,7 @@ const AiWorkflowPOC = () => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // ----------------
   // Effect Hooks
-  // ----------------
-
   useEffect(() => {
     const storedWorkspaces = JSON.parse(localStorage.getItem('recentWorkspaces') || '[]');
     const storedFiles = JSON.parse(localStorage.getItem('recentFiles') || '[]');
@@ -92,10 +60,7 @@ const AiWorkflowPOC = () => {
     setRecentFiles(storedFiles);
   }, []);
 
-  // ----------------
   // Callback Functions
-  // ----------------
-
   const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
 
   const onInit = useCallback((instance) => {
@@ -121,22 +86,15 @@ const AiWorkflowPOC = () => {
       newNode.data = {
         ...newNode.data,
         model: 'gpt-3.5-turbo',
-        systemMessage: '',
+        systemMessage: 'You are a helpful assistant.',
         temperature: 0.7,
         maxTokens: 150,
-        apiKey: '',
+        apiKeyId: null,
       };
     } else if (nodeType === 'textInput') {
       newNode.data = {
         ...newNode.data,
         inputText: '',
-        onChange: (text) => {
-          setNodes((nds) =>
-            nds.map((node) =>
-              node.id === newNode.id ? { ...node, data: { ...node.data, inputText: text } } : node
-            )
-          );
-        },
       };
     } else if (nodeType === 'textOutput') {
       newNode.data = {
@@ -175,6 +133,9 @@ const AiWorkflowPOC = () => {
       }
       return prev;
     });
+
+    // Force a re-render of the nodes
+    setNodes((nds) => [...nds]);
   }, [setNodes]);
 
   const onNodesDelete = useCallback(
@@ -194,10 +155,7 @@ const AiWorkflowPOC = () => {
     [setEdges]
   );
 
-  // ----------------
   // File Operations
-  // ----------------
-
   const onSave = useCallback(() => {
     if (reactFlowInstance && workspace) {
       const flow = reactFlowInstance.toObject();
@@ -259,10 +217,7 @@ const AiWorkflowPOC = () => {
     input.click();
   }, [setNodes, setEdges]);
 
-  // ----------------
   // Workspace Management
-  // ----------------
-
   const onSetWorkspace = useCallback((workspacePath) => {
     const normalizedPath = normalizePath(workspacePath);
     setWorkspace(normalizedPath);
@@ -281,10 +236,7 @@ const AiWorkflowPOC = () => {
     onOpen();
   }, [onOpen]);
 
-  // ----------------
   // Node Interaction
-  // ----------------
-
   const onNodeClick = useCallback((event, node) => {
     setSelectedNode(node);
   }, []);
@@ -297,10 +249,7 @@ const AiWorkflowPOC = () => {
     setSelectedNode(null);
   }, []);
 
-  // ----------------
   // Workflow Execution
-  // ----------------
-
   const executeWorkflow = useCallback(async () => {
     setIsExecuting(true);
     setErrorMessage('');
@@ -308,85 +257,58 @@ const AiWorkflowPOC = () => {
     const edgesCopy = [...edges];
 
     console.log('Starting workflow execution');
-    console.log('Nodes:', nodesCopy);
-    console.log('Edges:', edgesCopy);
 
-    // Find the input node
-    const inputNode = nodesCopy.find(node => node.type === 'textInput');
-    if (!inputNode) {
-      console.error('No input node found');
-      setErrorMessage('Error: No input node found in the workflow.');
-      setIsExecuting(false);
-      return;
-    }
+    try {
+      let currentNodeId = nodesCopy.find(node => node.type === 'textInput')?.id;
+      let inputText = nodesCopy.find(node => node.id === currentNodeId)?.data?.inputText || '';
 
-    console.log('Input node found:', inputNode);
+      while (currentNodeId) {
+        const currentNode = nodesCopy.find(node => node.id === currentNodeId);
+        if (!currentNode) break;
 
-    let currentNodeId = inputNode.id;
-    let inputText = inputNode.data.inputText;
+        console.log('Processing node:', currentNode);
 
-    console.log('Initial input text:', inputText);
+        if (currentNode.type === 'agent') {
+          const { apiKeyId, model, systemMessage, temperature, maxTokens } = currentNode.data;
+          const messages = [
+            { role: 'system', content: systemMessage || 'You are a helpful assistant.' },
+            { role: 'user', content: inputText }
+          ];
 
-    while (currentNodeId) {
-      const currentNode = nodesCopy.find(node => node.id === currentNodeId);
-      if (!currentNode) {
-        console.log('No more nodes found. Ending execution.');
-        break;
-      }
-
-      console.log('Processing node:', currentNode);
-
-      if (currentNode.type === 'agent') {
-        console.log('Agent node found. Calling OpenAI API...');
-        console.log('Agent node data:', currentNode.data);
-        try {
-          const response = await callOpenAI(
-            currentNode.data.apiKey,
-            currentNode.data.model,
-            [{ role: 'system', content: currentNode.data.systemMessage }, { role: 'user', content: inputText }],
-            currentNode.data.temperature,
-            currentNode.data.maxTokens
-          );
-          console.log('OpenAI API response:', response);
-          inputText = response; // Use the response as input for the next node
-        } catch (error) {
-          console.error('Error calling OpenAI:', error);
-          if (error.message.includes('Failed to fetch')) {
-            setErrorMessage('Error: Failed to connect to the OpenAI API. This might be due to CORS restrictions. Please ensure you have the necessary CORS configuration or are using a proxy server.');
-          } else {
+          try {
+            const response = await callOpenAI(apiKeyId, model, messages, temperature, maxTokens);
+            inputText = response;
+          } catch (error) {
+            console.error('Error calling OpenAI:', error);
             setErrorMessage(`Error calling OpenAI API: ${error.message}`);
+            setIsExecuting(false);
+            return;
           }
-          setIsExecuting(false);
-          return;
+        }
+
+        const outgoingEdge = edgesCopy.find(edge => edge.source === currentNodeId);
+        if (outgoingEdge) {
+          currentNodeId = outgoingEdge.target;
+        } else {
+          if (currentNode.type === 'textOutput') {
+            setNodes(prevNodes => prevNodes.map(node => 
+              node.id === currentNodeId ? { ...node, data: { ...node.data, text: inputText } } : node
+            ));
+          }
+          break;
         }
       }
 
-      // Find the next node
-      const outgoingEdge = edgesCopy.find(edge => edge.source === currentNodeId);
-      if (outgoingEdge) {
-        console.log('Moving to next node:', outgoingEdge.target);
-        currentNodeId = outgoingEdge.target;
-      } else {
-        console.log('No outgoing edge found. Checking if current node is output node.');
-        // If there's no outgoing edge, we've reached the end
-        if (currentNode.type === 'textOutput') {
-          console.log('Updating output node with text:', inputText);
-          setNodes(prevNodes => prevNodes.map(node => 
-            node.id === currentNodeId ? { ...node, data: { ...node.data, text: inputText } } : node
-          ));
-        }
-        break;
-      }
+      console.log('Workflow execution completed');
+    } catch (error) {
+      console.error('Error executing workflow:', error);
+      setErrorMessage(`Error executing workflow: ${error.message}`);
+    } finally {
+      setIsExecuting(false);
     }
+  }, [nodes, edges, setNodes]);
 
-    console.log('Workflow execution completed');
-    setIsExecuting(false);
-  }, [nodes, edges]);
-
-  // ----------------
   // Render
-  // ----------------
-
   return (
     <div className="app-container">
       <MenuBar 
@@ -436,13 +358,11 @@ const AiWorkflowPOC = () => {
           </ReactFlow>
         </div>
         {selectedNode && (
-          <div className="w-96">
-            <PropertyPanel
-              node={selectedNode}
-              onChange={onNodeChange}
-              onClose={onPanelClose}
-            />
-          </div>
+          <PropertyPanel
+            node={selectedNode}
+            onChange={onNodeChange}
+            onClose={onPanelClose}
+          />
         )}
       </div>
     </div>
