@@ -26,11 +26,6 @@ import { callOpenAI } from './services/openaiService';
 // Styles
 import './App.css';
 
-// Utility Functions
-function normalizePath(path) {
-  return path.replace(/\\/g, '/').replace(/\/+/g, '/');
-}
-
 // Node Type Definitions
 const nodeTypes = {
   agent: AgentNode,
@@ -46,7 +41,7 @@ const AiWorkflowPOC = () => {
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const [workspace, setWorkspace] = useState('');
   const [recentWorkspaces, setRecentWorkspaces] = useState([]);
-  const [recentFiles, setRecentFiles] = useState([]);
+  const [savedWorkflows, setSavedWorkflows] = useState([]);
   const [showWorkspaceManager, setShowWorkspaceManager] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -55,9 +50,8 @@ const AiWorkflowPOC = () => {
   // Effect Hooks
   useEffect(() => {
     const storedWorkspaces = JSON.parse(localStorage.getItem('recentWorkspaces') || '[]');
-    const storedFiles = JSON.parse(localStorage.getItem('recentFiles') || '[]');
     setRecentWorkspaces(storedWorkspaces);
-    setRecentFiles(storedFiles);
+    fetchWorkflows();
   }, []);
 
   // Callback Functions
@@ -155,86 +149,77 @@ const AiWorkflowPOC = () => {
     [setEdges]
   );
 
-  // File Operations
-  const onSave = useCallback(() => {
-    if (reactFlowInstance && workspace) {
-      const flow = reactFlowInstance.toObject();
-      const json = JSON.stringify(flow, null, 2);
-      
-      const fileName = prompt('Enter file name:', 'workflow.json');
-      if (fileName) {
-        const filePath = normalizePath(`${workspace}/${fileName}`);
-        console.log(`Preparing to save: ${filePath}`);
-        
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        URL.revokeObjectURL(url);
-
-        const updatedRecentFiles = [filePath, ...recentFiles.filter(f => f !== filePath)].slice(0, 5);
-        setRecentFiles(updatedRecentFiles);
-        localStorage.setItem('recentFiles', JSON.stringify(updatedRecentFiles));
-
-        console.log(`File "${fileName}" has been prepared for download.`);
-      }
-    } else {
-      setErrorMessage('Please set a workspace before saving.');
+  // Workflow Management Functions
+  const fetchWorkflows = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/workflows');
+      if (!response.ok) throw new Error('Failed to fetch workflows');
+      const workflows = await response.json();
+      setSavedWorkflows(workflows);
+    } catch (error) {
+      console.error('Error fetching workflows:', error);
+      setErrorMessage('Failed to fetch workflows');
     }
-  }, [reactFlowInstance, workspace, recentFiles]);
+  }, []);
 
-  const onOpen = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/json';
-    input.onchange = (event) => {
-      const file = event.target.files[0];
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const contents = e.target.result;
-          const flow = JSON.parse(contents);
-          if (flow.nodes && flow.edges) {
-            setNodes(flow.nodes);
-            setEdges(flow.edges);
-            console.log('Workflow loaded successfully');
-          } else {
-            throw new Error('Invalid workflow file format');
-          }
-        } catch (error) {
-          console.error('Error loading workflow:', error);
-          setErrorMessage('Error loading workflow. Please check the file format.');
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
+  const onSave = useCallback(async () => {
+    if (reactFlowInstance) {
+      const flow = reactFlowInstance.toObject();
+      const name = prompt('Enter a name for this workflow:');
+      if (!name) return;
+
+      try {
+        const response = await fetch('http://localhost:3000/api/workflows', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, data: flow }),
+        });
+
+        if (!response.ok) throw new Error('Failed to save workflow');
+        
+        console.log('Workflow saved successfully');
+        fetchWorkflows(); // Refresh the list of workflows
+      } catch (error) {
+        console.error('Error saving workflow:', error);
+        setErrorMessage('Failed to save workflow');
+      }
+    }
+  }, [reactFlowInstance, fetchWorkflows]);
+
+  const onLoad = useCallback(async (name) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/workflows/${name}`);
+      if (!response.ok) throw new Error('Failed to load workflow');
+      const flow = await response.json();
+      setNodes(flow.nodes || []);
+      setEdges(flow.edges || []);
+      console.log('Workflow loaded successfully');
+    } catch (error) {
+      console.error('Error loading workflow:', error);
+      setErrorMessage('Failed to load workflow');
+    }
   }, [setNodes, setEdges]);
+
+  const onDownload = useCallback(async (name) => {
+    try {
+      window.open(`http://localhost:3000/api/workflows/${name}/download`);
+    } catch (error) {
+      console.error('Error downloading workflow:', error);
+      setErrorMessage('Failed to download workflow');
+    }
+  }, []);
 
   // Workspace Management
   const onSetWorkspace = useCallback((workspacePath) => {
-    const normalizedPath = normalizePath(workspacePath);
-    setWorkspace(normalizedPath);
+    setWorkspace(workspacePath);
     setShowWorkspaceManager(false);
     
-    const updatedWorkspaces = [normalizedPath, ...recentWorkspaces.filter(w => w !== normalizedPath)].slice(0, 5);
+    const updatedWorkspaces = [workspacePath, ...recentWorkspaces.filter(w => w !== workspacePath)].slice(0, 5);
     setRecentWorkspaces(updatedWorkspaces);
     localStorage.setItem('recentWorkspaces', JSON.stringify(updatedWorkspaces));
     
-    console.log(`Workspace set to: ${normalizedPath}`);
+    console.log(`Workspace set to: ${workspacePath}`);
   }, [recentWorkspaces]);
-
-  const onOpenRecentFile = useCallback((filePath) => {
-    console.log(`Attempting to open recent file: ${filePath}`);
-    setErrorMessage(`Please select the file: ${filePath}`);
-    onOpen();
-  }, [onOpen]);
 
   // Node Interaction
   const onNodeClick = useCallback((event, node) => {
@@ -258,45 +243,94 @@ const AiWorkflowPOC = () => {
 
     console.log('Starting workflow execution');
 
-    try {
-      let currentNodeId = nodesCopy.find(node => node.type === 'textInput')?.id;
-      let inputText = nodesCopy.find(node => node.id === currentNodeId)?.data?.inputText || '';
+    const executedNodes = new Set();
+    const nodeOutputs = new Map();
 
-      while (currentNodeId) {
-        const currentNode = nodesCopy.find(node => node.id === currentNodeId);
-        if (!currentNode) break;
+    const executeNode = async (nodeId) => {
+      console.log(`Executing node: ${nodeId}`);
+      if (executedNodes.has(nodeId)) {
+        console.log(`Node ${nodeId} already executed, returning cached output`);
+        return nodeOutputs.get(nodeId);
+      }
 
-        console.log('Processing node:', currentNode);
+      const node = nodesCopy.find(n => n.id === nodeId);
+      if (!node) {
+        console.log(`Node ${nodeId} not found`);
+        return null;
+      }
 
-        if (currentNode.type === 'agent') {
-          const { apiKeyId, model, systemMessage, temperature, maxTokens } = currentNode.data;
+      let inputText = '';
+
+      // Gather inputs from all incoming edges
+      const incomingEdges = edgesCopy.filter(e => e.target === nodeId);
+      console.log(`Incoming edges for node ${nodeId}:`, incomingEdges);
+      for (const edge of incomingEdges) {
+        console.log(`Processing edge: ${edge.source} -> ${edge.target}`);
+        const sourceOutput = await executeNode(edge.source);
+        console.log(`Output from source node ${edge.source}:`, sourceOutput);
+        inputText += sourceOutput ? sourceOutput + ' ' : '';
+      }
+      console.log(`Combined input for node ${nodeId}:`, inputText);
+
+      let output = '';
+
+      switch (node.type) {
+        case 'textInput':
+          output = node.data.inputText || '';
+          console.log(`TextInput node ${nodeId} output:`, output);
+          break;
+        case 'agent':
+          const { apiKeyId, model, systemMessage, temperature, maxTokens } = node.data;
           const messages = [
             { role: 'system', content: systemMessage || 'You are a helpful assistant.' },
             { role: 'user', content: inputText }
           ];
+          console.log(`Calling OpenAI for node ${nodeId} with:`, { model, messages, temperature, maxTokens });
 
           try {
-            const response = await callOpenAI(apiKeyId, model, messages, temperature, maxTokens);
-            inputText = response;
+            output = await callOpenAI(apiKeyId, model, messages, temperature, maxTokens);
+            console.log(`OpenAI response for node ${nodeId}:`, output);
           } catch (error) {
-            console.error('Error calling OpenAI:', error);
-            setErrorMessage(`Error calling OpenAI API: ${error.message}`);
-            setIsExecuting(false);
-            return;
-          }
-        }
-
-        const outgoingEdge = edgesCopy.find(edge => edge.source === currentNodeId);
-        if (outgoingEdge) {
-          currentNodeId = outgoingEdge.target;
-        } else {
-          if (currentNode.type === 'textOutput') {
-            setNodes(prevNodes => prevNodes.map(node => 
-              node.id === currentNodeId ? { ...node, data: { ...node.data, text: inputText } } : node
-            ));
+            console.error(`Error calling OpenAI for node ${nodeId}:`, error);
+            setErrorMessage(`Error calling OpenAI API for node ${nodeId}: ${error.message}`);
+            output = `Error: ${error.message}`;
           }
           break;
-        }
+        case 'textOutput':
+          output = inputText;
+          console.log(`TextOutput node ${nodeId} setting text to:`, output);
+          setNodes(prevNodes => prevNodes.map(n => 
+            n.id === nodeId ? { ...n, data: { ...n.data, text: inputText } } : n
+          ));
+          break;
+        default:
+          console.log(`Unhandled node type: ${node.type}`);
+      }
+
+      executedNodes.add(nodeId);
+      nodeOutputs.set(nodeId, output);
+      console.log(`Node ${nodeId} execution complete. Output:`, output);
+
+      // Execute all outgoing nodes
+      const outgoingEdges = edgesCopy.filter(e => e.source === nodeId);
+      for (const edge of outgoingEdges) {
+        await executeNode(edge.target);
+      }
+
+      return output;
+    };
+
+    try {
+      // Find all nodes without incoming edges (start nodes)
+      const startNodes = nodesCopy.filter(node => 
+        !edgesCopy.some(edge => edge.target === node.id)
+      );
+      console.log('Start nodes:', startNodes);
+
+      // Execute the workflow starting from each start node
+      for (const startNode of startNodes) {
+        console.log(`Starting execution from node: ${startNode.id}`);
+        await executeNode(startNode.id);
       }
 
       console.log('Workflow execution completed');
@@ -306,20 +340,20 @@ const AiWorkflowPOC = () => {
     } finally {
       setIsExecuting(false);
     }
-  }, [nodes, edges, setNodes]);
+  }, [nodes, edges, setNodes, callOpenAI]);
 
   // Render
   return (
     <div className="app-container">
       <MenuBar 
-        onSave={onSave} 
-        onOpen={onOpen} 
-        onSetWorkspace={() => setShowWorkspaceManager(true)}
-        recentFiles={recentFiles}
-        onOpenRecentFile={onOpenRecentFile}
+        onSave={onSave}
+        onLoad={onLoad}
+        onDownload={onDownload}
+        savedWorkflows={savedWorkflows}
         currentWorkspace={workspace}
         onExecuteWorkflow={executeWorkflow}
         isExecuting={isExecuting}
+        onSetWorkspace={() => setShowWorkspaceManager(true)}
       />
       {showWorkspaceManager && (
         <WorkspaceManager 

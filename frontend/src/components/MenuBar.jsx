@@ -17,30 +17,45 @@
  * 
  * @component
  */
-
 import React from 'react';
 import { Button } from "./ui/button";
 
-const MenuBar = ({ onSave, onOpen, onSetWorkspace, recentFiles, onOpenRecentFile, currentWorkspace, onExecuteWorkflow, isExecuting }) => {
+const MenuBar = ({ onSave, onLoad, onDownload, savedWorkflows = [], currentWorkspace, onExecuteWorkflow, isExecuting }) => {
   return (
     <div className="menu-bar flex justify-between items-center p-2 bg-gray-100">
       <div className="flex space-x-2">
         <div className="dropdown">
           <Button className="menu-item">File</Button>
           <div className="dropdown-content">
-            <Button onClick={onSave} title="Downloads the workflow to your default download location">Download Workflow</Button>
-            <Button onClick={onOpen}>Open Workflow</Button>
-            <Button onClick={onSetWorkspace}>Set Workspace</Button>
-            {recentFiles.length > 0 && (
-              <div className="recent-files">
-                <span>Recent Files:</span>
-                {recentFiles.map((file, index) => (
-                  <Button key={index} onClick={() => onOpenRecentFile(file)}>
-                    {file}
-                  </Button>
-                ))}
+            <Button onClick={onSave}>Save Workflow</Button>
+            <div className="dropdown">
+              <Button>Load Workflow</Button>
+              <div className="dropdown-content">
+                {savedWorkflows.length > 0 ? (
+                  savedWorkflows.map((workflow) => (
+                    <Button key={workflow} onClick={() => onLoad(workflow.replace('.json', ''))}>
+                      {workflow.replace('.json', '')}
+                    </Button>
+                  ))
+                ) : (
+                  <div>No saved workflows</div>
+                )}
               </div>
-            )}
+            </div>
+            <div className="dropdown">
+              <Button>Download Workflow</Button>
+              <div className="dropdown-content">
+                {savedWorkflows.length > 0 ? (
+                  savedWorkflows.map((workflow) => (
+                    <Button key={workflow} onClick={() => onDownload(workflow.replace('.json', ''))}>
+                      {workflow.replace('.json', '')}
+                    </Button>
+                  ))
+                ) : (
+                  <div>No saved workflows</div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
         <Button className="menu-item">Edit</Button>
