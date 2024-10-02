@@ -1,26 +1,17 @@
-/**
- * MenuBar.jsx
- * 
- * This component renders the top menu bar of the application.
- * It provides options for file operations, workspace management,
- * and workflow execution.
- * 
- * Props:
- * - onSave: Function to handle saving the workflow
- * - onOpen: Function to handle opening a workflow
- * - onSetWorkspace: Function to set the current workspace
- * - recentFiles: Array of recent file paths
- * - onOpenRecentFile: Function to open a recent file
- * - currentWorkspace: String representing the current workspace path
- * - onExecuteWorkflow: Function to execute the current workflow
- * - isExecuting: Boolean indicating if a workflow is currently executing
- * 
- * @component
- */
 import React from 'react';
 import { Button } from "./ui/button";
 
-const MenuBar = ({ onSave, onLoad, onDownload, savedWorkflows = [], currentWorkspace, onExecuteWorkflow, isExecuting }) => {
+const MenuBar = ({ 
+  onSave, 
+  onLoad, 
+  onDownload, 
+  savedWorkflows = [], 
+  currentWorkspace,
+  onSetWorkspace,
+  onExecuteWorkflow, 
+  isExecuting,
+  onShowCredentialManager
+}) => {
   return (
     <div className="menu-bar flex justify-between items-center p-2 bg-gray-100">
       <div className="flex space-x-2">
@@ -66,8 +57,12 @@ const MenuBar = ({ onSave, onLoad, onDownload, savedWorkflows = [], currentWorks
         <div className="current-workspace text-sm">
           Current Workspace: {currentWorkspace || 'Not set'}
         </div>
+        <Button onClick={onSetWorkspace}>Set Workspace</Button>
         <Button onClick={onExecuteWorkflow} disabled={isExecuting}>
           {isExecuting ? 'Executing...' : 'Execute Workflow'}
+        </Button>
+        <Button onClick={onShowCredentialManager}>
+          Manage Credentials
         </Button>
       </div>
     </div>

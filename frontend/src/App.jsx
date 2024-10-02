@@ -1,5 +1,3 @@
-// src/App.jsx
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
   addEdge,
@@ -19,6 +17,7 @@ import TextInputNode from './components/TextInputNode';
 import TextOutputNode from './components/TextOutputNode';
 import PropertyPanel from './components/PropertyPanel';
 import WorkspaceManager from './components/WorkspaceManager';
+import CredentialManager from './components/CredentialManager';
 
 // Service imports
 import { callOpenAI } from './services/openaiService';
@@ -43,6 +42,7 @@ const AiWorkflowPOC = () => {
   const [recentWorkspaces, setRecentWorkspaces] = useState([]);
   const [savedWorkflows, setSavedWorkflows] = useState([]);
   const [showWorkspaceManager, setShowWorkspaceManager] = useState(false);
+  const [showCredentialManager, setShowCredentialManager] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -242,6 +242,8 @@ const AiWorkflowPOC = () => {
     const edgesCopy = [...edges];
 
     console.log('Starting workflow execution');
+    console.log('All nodes:', nodesCopy);
+    console.log('All edges:', edgesCopy);
 
     const executedNodes = new Set();
     const nodeOutputs = new Map();
@@ -258,6 +260,8 @@ const AiWorkflowPOC = () => {
         console.log(`Node ${nodeId} not found`);
         return null;
       }
+
+      console.log(`Node ${nodeId} data:`, node.data);
 
       let inputText = '';
 
@@ -281,11 +285,12 @@ const AiWorkflowPOC = () => {
           break;
         case 'agent':
           const { apiKeyId, model, systemMessage, temperature, maxTokens } = node.data;
+          console.log(`Agent node ${nodeId} data:`, { apiKeyId, model, systemMessage, temperature, maxTokens });
           const messages = [
             { role: 'system', content: systemMessage || 'You are a helpful assistant.' },
             { role: 'user', content: inputText }
           ];
-          console.log(`Calling OpenAI for node ${nodeId} with:`, { model, messages, temperature, maxTokens });
+          console.log(`Calling OpenAI for node ${nodeId} with:`, { apiKeyId, model, messages, temperature, maxTokens });
 
           try {
             output = await callOpenAI(apiKeyId, model, messages, temperature, maxTokens);
@@ -311,9 +316,11 @@ const AiWorkflowPOC = () => {
       nodeOutputs.set(nodeId, output);
       console.log(`Node ${nodeId} execution complete. Output:`, output);
 
-      // Execute all outgoing nodes
+      // Check for outgoing edges and execute connected nodes
       const outgoingEdges = edgesCopy.filter(e => e.source === nodeId);
+      console.log(`Outgoing edges for node ${nodeId}:`, outgoingEdges);
       for (const edge of outgoingEdges) {
+        console.log(`Executing connected node: ${edge.target}`);
         await executeNode(edge.target);
       }
 
@@ -340,7 +347,7 @@ const AiWorkflowPOC = () => {
     } finally {
       setIsExecuting(false);
     }
-  }, [nodes, edges, setNodes, callOpenAI]);
+  }, [nodes, edges, setNodes]);
 
   // Render
   return (
@@ -351,16 +358,25 @@ const AiWorkflowPOC = () => {
         onDownload={onDownload}
         savedWorkflows={savedWorkflows}
         currentWorkspace={workspace}
+        onSetWorkspace={() => setShowWorkspaceManager(true)}
         onExecuteWorkflow={executeWorkflow}
         isExecuting={isExecuting}
-        onSetWorkspace={() => setShowWorkspaceManager(true)}
+        onShowCredentialManager={() => setShowCredentialManager(true)}
       />
       {showWorkspaceManager && (
         <WorkspaceManager 
           onSetWorkspace={onSetWorkspace}
           recentWorkspaces={recentWorkspaces}
           onSelectRecentWorkspace={onSetWorkspace}
+          onClose={() => setShowWorkspaceManager(false)}
         />
+      )}
+      {showCredentialManager && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <CredentialManager 
+            onClose={() => setShowCredentialManager(false)}
+          />
+        </div>
       )}
       {errorMessage && (
         <div className="error-message">

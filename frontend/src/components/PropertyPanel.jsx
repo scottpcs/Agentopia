@@ -1,6 +1,4 @@
-// src/components/PropertyPanel.jsx
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -15,39 +13,28 @@ const modelOptions = [
 ];
 
 const PropertyPanel = ({ node, onChange, onClose }) => {
-  const [isSubmittingKey, setIsSubmittingKey] = useState(false);
+  const [apiKeys, setApiKeys] = useState([]);
 
-  if (!node) return null;
+  useEffect(() => {
+    fetchApiKeys();
+  }, []);
+
+  const fetchApiKeys = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/keys');
+      if (!response.ok) throw new Error('Failed to fetch API keys');
+      const keys = await response.json();
+      setApiKeys(keys);
+    } catch (error) {
+      console.error('Error fetching API keys:', error);
+    }
+  };
 
   const handleChange = (key, value) => {
     onChange(node.id, { [key]: value });
   };
 
-
-const handleApiKeySubmit = async (apiKey) => {
-  if (!apiKey) return;
-  
-  setIsSubmittingKey(true);
-  try {
-    const response = await fetch('http://localhost:3000/api/keys', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ key: 'openai', value: apiKey }),
-    });
-    if (!response.ok) {
-      throw new Error('Failed to store API key');
-    }
-    const data = await response.json();
-    onChange(node.id, { apiKeyId: data.keyId });
-  } catch (error) {
-    console.error('Error storing API key:', error);
-    // You might want to show an error message to the user here
-  } finally {
-    setIsSubmittingKey(false);
-  }
-};
+  if (!node) return null;
 
   return (
     <div className="property-panel fixed right-0 top-0 h-full w-96 bg-white shadow-lg p-4 overflow-y-auto">
@@ -88,6 +75,23 @@ const handleApiKeySubmit = async (apiKey) => {
             </div>
             
             <div>
+              <Label htmlFor="apiKey">API Key</Label>
+              <select
+                id="apiKey"
+                value={node.data.apiKeyId || ''}
+                onChange={(e) => handleChange('apiKeyId', e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="">Select API Key</option>
+                {apiKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
               <Label htmlFor="systemMessage">System Message</Label>
               <textarea
                 id="systemMessage"
@@ -121,23 +125,6 @@ const handleApiKeySubmit = async (apiKey) => {
                 value={node.data.maxTokens || 150}
                 onChange={(e) => handleChange('maxTokens', parseInt(e.target.value))}
               />
-            </div>
-            
-            <div>
-              <Label htmlFor="apiKey">API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="Enter your OpenAI API key"
-                onBlur={(e) => handleApiKeySubmit(e.target.value)}
-                disabled={isSubmittingKey}
-              />
-              {node.data.apiKeyId && (
-                <p className="text-sm text-green-600 mt-1">API key stored securely</p>
-              )}
-              {isSubmittingKey && (
-                <p className="text-sm text-blue-600 mt-1">Submitting API key...</p>
-              )}
             </div>
           </>
         )}
