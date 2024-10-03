@@ -27,10 +27,18 @@ const CredentialManager = ({ onClose }) => {
     }
   };
 
+  const verifyApiKey = (key) => {
+    return key.startsWith('sk-') && key.length > 20 && key.length < 100;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    if (activeTab === 'keys' && !verifyApiKey(newItemValue)) {
+      setError('Invalid API key format. It should start with "sk-" and be between 20-100 characters.');
+      return;
+    }
     try {
       const response = await fetch(`http://localhost:3000/api/${activeTab}`, {
         method: 'POST',
@@ -41,14 +49,17 @@ const CredentialManager = ({ onClose }) => {
           id: activeTab === 'keys' ? undefined : newItemValue
         }),
       });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Failed to save');
+      }
       setNewItemName('');
       setNewItemValue('');
       setSuccess(`${activeTab.slice(0, -1)} saved successfully`);
       fetchItems();
     } catch (error) {
       console.error(`Error saving ${activeTab.slice(0, -1)}:`, error);
-      setError(`Failed to save ${activeTab.slice(0, -1)}. Please try again.`);
+      setError(`Failed to save ${activeTab.slice(0, -1)}: ${error.message}`);
     }
   };
 

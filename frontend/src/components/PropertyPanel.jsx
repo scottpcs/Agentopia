@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
+import AgentWizardModal from './AgentWizardModal';
 
 const modelOptions = [
   { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
@@ -14,6 +15,7 @@ const modelOptions = [
 
 const PropertyPanel = ({ node, onChange, onClose }) => {
   const [apiKeys, setApiKeys] = useState([]);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
 
   useEffect(() => {
     fetchApiKeys();
@@ -32,6 +34,25 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
 
   const handleChange = (key, value) => {
     onChange(node.id, { [key]: value });
+  };
+
+  const openWizard = () => {
+    setIsWizardOpen(true);
+  };
+
+  const closeWizard = () => {
+    setIsWizardOpen(false);
+  };
+
+  const handleSavePersonality = (personalitySettings) => {
+    onChange(node.id, {
+      personality: personalitySettings.creativity,
+      modelSettings: personalitySettings.modelSettings,
+      customInstructions: personalitySettings.customInstructions,
+      temperature: personalitySettings.modelSettings.temperature,
+      maxTokens: personalitySettings.modelSettings.maxTokens,
+    });
+    closeWizard();
   };
 
   if (!node) return null;
@@ -126,6 +147,32 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
                 onChange={(e) => handleChange('maxTokens', parseInt(e.target.value))}
               />
             </div>
+
+            <div>
+              <Label htmlFor="customInstructions">Custom Instructions</Label>
+              <textarea
+                id="customInstructions"
+                value={node.data.customInstructions || ''}
+                onChange={(e) => handleChange('customInstructions', e.target.value)}
+                className="w-full p-2 border rounded mt-1"
+                rows={4}
+              />
+            </div>
+
+            <div>
+              <Button onClick={openWizard} className="w-full">
+                Configure Agent Personality
+              </Button>
+            </div>
+
+            {node.data.personality && (
+              <div className="mt-4 p-2 bg-gray-100 rounded">
+                <h4 className="font-semibold mb-2">Current Personality Settings:</h4>
+                <p>Creativity: X: {node.data.personality.x}, Y: {node.data.personality.y}</p>
+                <p>Temperature: {node.data.temperature.toFixed(2)}</p>
+                <p>Max Tokens: {node.data.maxTokens}</p>
+              </div>
+            )}
           </>
         )}
         
@@ -155,6 +202,12 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
           </div>
         )}
       </div>
+
+      <AgentWizardModal 
+        isOpen={isWizardOpen} 
+        onClose={closeWizard}
+        onSave={handleSavePersonality}
+      />
     </div>
   );
 };

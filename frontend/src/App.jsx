@@ -84,6 +84,7 @@ const AiWorkflowPOC = () => {
         temperature: 0.7,
         maxTokens: 150,
         apiKeyId: null,
+        customInstructions: '',
       };
     } else if (nodeType === 'textInput') {
       newNode.data = {
@@ -284,16 +285,37 @@ const AiWorkflowPOC = () => {
           console.log(`TextInput node ${nodeId} output:`, output);
           break;
         case 'agent':
-          const { apiKeyId, model, systemMessage, temperature, maxTokens } = node.data;
-          console.log(`Agent node ${nodeId} data:`, { apiKeyId, model, systemMessage, temperature, maxTokens });
+          const { 
+            apiKeyId, 
+            model, 
+            systemMessage, 
+            temperature,
+            maxTokens,
+            customInstructions 
+          } = node.data;
+          console.log(`Agent node ${nodeId} data:`, { apiKeyId, model, systemMessage, temperature, maxTokens, customInstructions });
           const messages = [
             { role: 'system', content: systemMessage || 'You are a helpful assistant.' },
             { role: 'user', content: inputText }
           ];
-          console.log(`Calling OpenAI for node ${nodeId} with:`, { apiKeyId, model, messages, temperature, maxTokens });
+          console.log(`Calling OpenAI for node ${nodeId} with:`, { 
+            apiKeyId, 
+            model, 
+            messages, 
+            temperature, 
+            maxTokens, 
+            customInstructions 
+          });
 
           try {
-            output = await callOpenAI(apiKeyId, model, messages, temperature, maxTokens);
+            output = await callOpenAI(
+              apiKeyId, 
+              model, 
+              messages, 
+              temperature, 
+              maxTokens, 
+              customInstructions
+            );
             console.log(`OpenAI response for node ${nodeId}:`, output);
           } catch (error) {
             console.error(`Error calling OpenAI for node ${nodeId}:`, error);
@@ -316,11 +338,9 @@ const AiWorkflowPOC = () => {
       nodeOutputs.set(nodeId, output);
       console.log(`Node ${nodeId} execution complete. Output:`, output);
 
-      // Check for outgoing edges and execute connected nodes
+      // Execute all connected nodes
       const outgoingEdges = edgesCopy.filter(e => e.source === nodeId);
-      console.log(`Outgoing edges for node ${nodeId}:`, outgoingEdges);
       for (const edge of outgoingEdges) {
-        console.log(`Executing connected node: ${edge.target}`);
         await executeNode(edge.target);
       }
 

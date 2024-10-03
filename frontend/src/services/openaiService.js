@@ -1,5 +1,5 @@
-export async function callOpenAI(keyId, model, messages, temperature, maxTokens) {
-  console.log('callOpenAI function called with:', { keyId, model, messages, temperature, maxTokens });
+export async function callOpenAI(keyId, model, messages, temperature, maxTokens, customInstructions) {
+  console.log('callOpenAI function called with:', { keyId, model, messages, temperature, maxTokens, customInstructions });
   
   try {
     console.log('Sending request to /api/openai');
@@ -14,6 +14,7 @@ export async function callOpenAI(keyId, model, messages, temperature, maxTokens)
         messages,
         temperature,
         maxTokens,
+        customInstructions
       }),
     });
 
@@ -36,6 +37,8 @@ export async function callOpenAI(keyId, model, messages, temperature, maxTokens)
     }
   } catch (error) {
     console.error('Error in callOpenAI:', error);
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
     throw error;
   }
 }

@@ -49,39 +49,41 @@ const decrypt = (hash) => {
   return decrypted.toString();
 };
 
-// API Key Management
+// Add this function after the encrypt and decrypt functions
+function verifyApiKey(key) {
+  // Check if the key starts with 'sk-' and has a reasonable length
+  return key.startsWith('sk-') && key.length > 20 && key.length < 100;
+}
+
+// Update the API key storage endpoint
 app.post('/api/keys', async (req, res) => {
   try {
     const { name, value } = req.body;
+    if (!verifyApiKey(value)) {
+      throw new Error('Invalid API key format');
+    }
     const encrypted = encrypt(value);
     await fs.writeFile(path.join(keysDir, `${name}.json`), JSON.stringify(encrypted));
     res.json({ message: 'API key saved successfully' });
   } catch (error) {
     console.error('Error saving API key:', error);
-    res.status(500).json({ error: 'Error saving API key' });
+    res.status(400).json({ error: 'Error saving API key', details: error.message });
   }
 });
 
-app.get('/api/keys', async (req, res) => {
-  try {
-    const files = await fs.readdir(keysDir);
-    const keys = files.map(file => path.basename(file, '.json'));
-    res.json(keys);
-  } catch (error) {
-    console.error('Error listing API keys:', error);
-    res.status(500).json({ error: 'Error listing API keys' });
-  }
-});
-
+// Update the API key retrieval endpoint
 app.get('/api/keys/:name', async (req, res) => {
   try {
     const { name } = req.params;
     const data = await fs.readFile(path.join(keysDir, `${name}.json`), 'utf8');
     const decrypted = decrypt(JSON.parse(data));
+    if (!verifyApiKey(decrypted)) {
+      throw new Error('Retrieved API key is invalid');
+    }
     res.json({ value: decrypted });
   } catch (error) {
     console.error('Error retrieving API key:', error);
-    res.status(500).json({ error: 'Error retrieving API key' });
+    res.status(500).json({ error: 'Error retrieving API key', details: error.message });
   }
 });
 
@@ -156,27 +158,95 @@ app.get('/api/threads/:name', async (req, res) => {
 // OpenAI API endpoint
 app.post('/api/openai', async (req, res) => {
   try {
-    const { keyId, model, messages, temperature, maxTokens } = req.body;
+    const { keyId, model, messages, temperature, maxTokens, customInstructions } = req.body;
+
+    console.log('Received request:', { keyId, model, messages, temperature, maxTokens, customInstructions });
 
     const keyData = await fs.readFile(path.join(keysDir, `${keyId}.json`), 'utf8');
     const decrypted = decrypt(JSON.parse(keyData));
 
+    // Ensure the API key is properly formatted
+    const apiKey = decrypted.trim().replace(/[^\x20-\x7E]/g, '');
+
+    // Append custom instructions to the system message
+    const preparedMessages = messages.map((msg, index) => {
+      if (index === 0 && msg.role === 'system') {
+        return {
+          ...msg,
+          content: `${msg.content}\n\n${customInstructions}`
+        };
+      }
+      return msg;
+    });
+
+    console.log('Prepared messages:', preparedMessages);
+
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model,
-      messages,
+      messages: preparedMessages,
       temperature,
       max_tokens: maxTokens
     }, {
       headers: {
-        'Authorization': `Bearer ${decrypted.trim()}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       }
     });
 
+    console.log('OpenAI API response:', response.data);
+
     res.json(response.data);
   } catch (error) {
     console.error('Error in OpenAI API call:', error.message);
+    if (error.response) {
+      console.error('OpenAI API error response:', error.response.data);
+    }
     res.status(500).json({ error: 'Error calling OpenAI API', details: error.message });
+  }
+});
+
+// Workflow Management
+app.post('/api/workflows', async (req, res) => {
+  try {
+    const { name, data } = req.body;
+    await fs.writeFile(path.join(workflowsDir, `${name}.json`), JSON.stringify(data));
+    res.json({ message: 'Workflow saved successfully' });
+  } catch (error) {
+    console.error('Error saving workflow:', error);
+    res.status(500).json({ error: 'Error saving workflow' });
+  }
+});
+
+app.get('/api/workflows', async (req, res) => {
+  try {
+    const files = await fs.readdir(workflowsDir);
+    const workflows = files.map(file => path.basename(file, '.json'));
+    res.json(workflows);
+  } catch (error) {
+    console.error('Error listing workflows:', error);
+    res.status(500).json({ error: 'Error listing workflows' });
+  }
+});
+
+app.get('/api/workflows/:name', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const data = await fs.readFile(path.join(workflowsDir, `${name}.json`), 'utf8');
+    res.json(JSON.parse(data));
+  } catch (error) {
+    console.error('Error retrieving workflow:', error);
+    res.status(500).json({ error: 'Error retrieving workflow' });
+  }
+});
+
+app.get('/api/workflows/:name/download', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const filePath = path.join(workflowsDir, `${name}.json`);
+    res.download(filePath);
+  } catch (error) {
+    console.error('Error downloading workflow:', error);
+    res.status(500).json({ error: 'Error downloading workflow' });
   }
 });
 
