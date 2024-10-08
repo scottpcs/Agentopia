@@ -21,6 +21,7 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+
 # Frontend build
 /frontend/dist
 /frontend/build
@@ -28,3 +29,6 @@ yarn-error.log*
 # Backend build
 /backend/dist
 /backend/build
+
+# Code heap folder
+/code_heap

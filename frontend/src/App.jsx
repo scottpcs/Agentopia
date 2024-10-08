@@ -15,6 +15,7 @@ import Toolbar from './components/Toolbar';
 import AgentNode from './components/AgentNode';
 import TextInputNode from './components/TextInputNode';
 import TextOutputNode from './components/TextOutputNode';
+import HumanInteractionNode from './components/HumanInteractionNode';
 import PropertyPanel from './components/PropertyPanel';
 import WorkspaceManager from './components/WorkspaceManager';
 import CredentialManager from './components/CredentialManager';
@@ -30,6 +31,7 @@ const nodeTypes = {
   agent: AgentNode,
   textInput: TextInputNode,
   textOutput: TextOutputNode,
+  humanInteraction: HumanInteractionNode,
 };
 
 const AiWorkflowPOC = () => {
@@ -76,26 +78,36 @@ const AiWorkflowPOC = () => {
       data: { label: `New ${nodeType} Node` },
     };
 
-    if (nodeType === 'agent') {
-      newNode.data = {
-        ...newNode.data,
-        model: 'gpt-3.5-turbo',
-        systemMessage: 'You are a helpful assistant.',
-        temperature: 0.7,
-        maxTokens: 150,
-        apiKeyId: null,
-        customInstructions: '',
-      };
-    } else if (nodeType === 'textInput') {
-      newNode.data = {
-        ...newNode.data,
-        inputText: '',
-      };
-    } else if (nodeType === 'textOutput') {
-      newNode.data = {
-        ...newNode.data,
-        text: '',
-      };
+    switch (nodeType) {
+      case 'agent':
+        newNode.data = {
+          ...newNode.data,
+          model: 'gpt-3.5-turbo',
+          systemMessage: 'You are a helpful assistant.',
+          temperature: 0.7,
+          maxTokens: 150,
+          apiKeyId: null,
+          customInstructions: '',
+        };
+        break;
+      case 'textInput':
+        newNode.data = {
+          ...newNode.data,
+          inputText: '',
+        };
+        break;
+      case 'textOutput':
+        newNode.data = {
+          ...newNode.data,
+          text: '',
+        };
+        break;
+      case 'humanInteraction':
+        newNode.data = {
+          ...newNode.data,
+          ref: React.createRef(),
+        };
+        break;
     }
 
     setNodes((nds) => nds.concat(newNode));
@@ -330,6 +342,20 @@ const AiWorkflowPOC = () => {
             n.id === nodeId ? { ...n, data: { ...n.data, text: inputText } } : n
           ));
           break;
+        case 'humanInteraction':
+          // For human interaction, we'll need to wait for user input
+          // This is a simplified implementation and might need to be adjusted
+          // based on how you want to handle user interactions during execution
+          node.data.ref.current.handleReceive(inputText);
+          output = await new Promise(resolve => {
+            const handleSend = (message) => {
+              resolve(message);
+            };
+            // You might want to implement a way to cancel this promise if needed
+            node.data.ref.current.onSend = handleSend;
+          });
+          console.log(`HumanInteraction node ${nodeId} output:`, output);
+          break;
         default:
           console.log(`Unhandled node type: ${node.type}`);
       }
@@ -440,3 +466,4 @@ const AiWorkflowPOC = () => {
 };
 
 export default AiWorkflowPOC;
+      

@@ -2,8 +2,8 @@
 const cors = require('cors');
 const fs = require('fs').promises;
 const path = require('path');
-const crypto = require('crypto');
 const axios = require('axios');
+const encryptedKeyService = require('./encryptedKeyService');
 require('dotenv').config();
 
 const app = express();
@@ -16,157 +16,78 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Ensure the necessary directories exist
-const workflowsDir = path.join(__dirname, 'workflows');
-const keysDir = path.join(__dirname, 'keys');
-const assistantsDir = path.join(__dirname, 'assistants');
-const threadsDir = path.join(__dirname, 'threads');
+// Initialize the database
+encryptedKeyService.init().catch(console.error);
 
-Promise.all([
-  fs.mkdir(workflowsDir, { recursive: true }),
-  fs.mkdir(keysDir, { recursive: true }),
-  fs.mkdir(assistantsDir, { recursive: true }),
-  fs.mkdir(threadsDir, { recursive: true })
-]).catch(console.error);
-
-// Encryption functions
-const algorithm = 'aes-256-ctr';
-const secretKey = process.env.ENCRYPTION_KEY || crypto.randomBytes(32);
-
-const encrypt = (text) => {
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(algorithm, secretKey, iv);
-  const encrypted = Buffer.concat([cipher.update(text), cipher.final()]);
-  return {
-    iv: iv.toString('hex'),
-    content: encrypted.toString('hex')
-  };
+// Middleware to check authentication (placeholder - implement proper JWT verification)
+const authMiddleware = (req, res, next) => {
+  // TODO: Implement proper JWT verification
+  req.userId = 1; // Placeholder user ID
+  next();
 };
 
-const decrypt = (hash) => {
-  const decipher = crypto.createDecipheriv(algorithm, secretKey, Buffer.from(hash.iv, 'hex'));
-  const decrypted = Buffer.concat([decipher.update(Buffer.from(hash.content, 'hex')), decipher.final()]);
-  return decrypted.toString();
-};
-
-// Add this function after the encrypt and decrypt functions
-function verifyApiKey(key) {
-  // Check if the key starts with 'sk-' and has a reasonable length
-  return key.startsWith('sk-') && key.length > 20 && key.length < 100;
-}
-
-// Update the API key storage endpoint
-app.post('/api/keys', async (req, res) => {
+// API Key Management
+app.post('/api/keys', authMiddleware, async (req, res) => {
   try {
     const { name, value } = req.body;
-    if (!verifyApiKey(value)) {
-      throw new Error('Invalid API key format');
+    if (!name || !value) {
+      return res.status(400).json({ error: 'Name and value are required' });
     }
-    const encrypted = encrypt(value);
-    await fs.writeFile(path.join(keysDir, `${name}.json`), JSON.stringify(encrypted));
-    res.json({ message: 'API key saved successfully' });
+    const keyId = await encryptedKeyService.saveApiKey(req.userId, name, value);
+    res.json({ message: 'API key saved successfully', id: keyId });
   } catch (error) {
     console.error('Error saving API key:', error);
-    res.status(400).json({ error: 'Error saving API key', details: error.message });
+    res.status(500).json({ error: 'Error saving API key' });
   }
 });
 
-// Update the API key retrieval endpoint
-app.get('/api/keys/:name', async (req, res) => {
+app.get('/api/keys', authMiddleware, async (req, res) => {
+  try {
+    const keys = await encryptedKeyService.listApiKeys(req.userId);
+    res.json(keys);
+  } catch (error) {
+    console.error('Error listing API keys:', error);
+    res.status(500).json({ error: 'Error listing API keys' });
+  }
+});
+
+app.get('/api/keys/:name', authMiddleware, async (req, res) => {
   try {
     const { name } = req.params;
-    const data = await fs.readFile(path.join(keysDir, `${name}.json`), 'utf8');
-    const decrypted = decrypt(JSON.parse(data));
-    if (!verifyApiKey(decrypted)) {
-      throw new Error('Retrieved API key is invalid');
+    const value = await encryptedKeyService.getApiKey(req.userId, name);
+    if (value) {
+      res.json({ value });
+    } else {
+      res.status(404).json({ error: 'API key not found' });
     }
-    res.json({ value: decrypted });
   } catch (error) {
     console.error('Error retrieving API key:', error);
-    res.status(500).json({ error: 'Error retrieving API key', details: error.message });
+    res.status(500).json({ error: 'Error retrieving API key' });
   }
 });
 
-// Assistant Management
-app.post('/api/assistants', async (req, res) => {
-  try {
-    const { name, id } = req.body;
-    await fs.writeFile(path.join(assistantsDir, `${name}.json`), JSON.stringify({ id }));
-    res.json({ message: 'Assistant saved successfully' });
-  } catch (error) {
-    console.error('Error saving assistant:', error);
-    res.status(500).json({ error: 'Error saving assistant' });
-  }
-});
-
-app.get('/api/assistants', async (req, res) => {
-  try {
-    const files = await fs.readdir(assistantsDir);
-    const assistants = files.map(file => path.basename(file, '.json'));
-    res.json(assistants);
-  } catch (error) {
-    console.error('Error listing assistants:', error);
-    res.status(500).json({ error: 'Error listing assistants' });
-  }
-});
-
-app.get('/api/assistants/:name', async (req, res) => {
+app.delete('/api/keys/:name', authMiddleware, async (req, res) => {
   try {
     const { name } = req.params;
-    const data = await fs.readFile(path.join(assistantsDir, `${name}.json`), 'utf8');
-    res.json(JSON.parse(data));
+    await encryptedKeyService.deleteApiKey(req.userId, name);
+    res.json({ message: 'API key deleted successfully' });
   } catch (error) {
-    console.error('Error retrieving assistant:', error);
-    res.status(500).json({ error: 'Error retrieving assistant' });
-  }
-});
-
-// Thread Management
-app.post('/api/threads', async (req, res) => {
-  try {
-    const { name, id } = req.body;
-    await fs.writeFile(path.join(threadsDir, `${name}.json`), JSON.stringify({ id }));
-    res.json({ message: 'Thread saved successfully' });
-  } catch (error) {
-    console.error('Error saving thread:', error);
-    res.status(500).json({ error: 'Error saving thread' });
-  }
-});
-
-app.get('/api/threads', async (req, res) => {
-  try {
-    const files = await fs.readdir(threadsDir);
-    const threads = files.map(file => path.basename(file, '.json'));
-    res.json(threads);
-  } catch (error) {
-    console.error('Error listing threads:', error);
-    res.status(500).json({ error: 'Error listing threads' });
-  }
-});
-
-app.get('/api/threads/:name', async (req, res) => {
-  try {
-    const { name } = req.params;
-    const data = await fs.readFile(path.join(threadsDir, `${name}.json`), 'utf8');
-    res.json(JSON.parse(data));
-  } catch (error) {
-    console.error('Error retrieving thread:', error);
-    res.status(500).json({ error: 'Error retrieving thread' });
+    console.error('Error deleting API key:', error);
+    res.status(500).json({ error: 'Error deleting API key' });
   }
 });
 
 // OpenAI API endpoint
-app.post('/api/openai', async (req, res) => {
+app.post('/api/openai', authMiddleware, async (req, res) => {
   try {
-    const { keyId, model, messages, temperature, maxTokens, customInstructions } = req.body;
+    const { keyName, model, messages, temperature, maxTokens, customInstructions } = req.body;
 
-    console.log('Received request:', { keyId, model, messages, temperature, maxTokens, customInstructions });
+    console.log('Received request:', { keyName, model, messages, temperature, maxTokens, customInstructions });
 
-    const keyData = await fs.readFile(path.join(keysDir, `${keyId}.json`), 'utf8');
-    const decrypted = decrypt(JSON.parse(keyData));
-
-    // Ensure the API key is properly formatted
-    const apiKey = decrypted.trim().replace(/[^\x20-\x7E]/g, '');
+    const apiKey = await encryptedKeyService.getApiKey(req.userId, keyName);
+    if (!apiKey) {
+      return res.status(404).json({ error: 'API key not found' });
+    }
 
     // Append custom instructions to the system message
     const preparedMessages = messages.map((msg, index) => {
@@ -209,7 +130,7 @@ app.post('/api/openai', async (req, res) => {
 app.post('/api/workflows', async (req, res) => {
   try {
     const { name, data } = req.body;
-    await fs.writeFile(path.join(workflowsDir, `${name}.json`), JSON.stringify(data));
+    await fs.writeFile(path.join(__dirname, 'workflows', `${name}.json`), JSON.stringify(data));
     res.json({ message: 'Workflow saved successfully' });
   } catch (error) {
     console.error('Error saving workflow:', error);
@@ -219,7 +140,7 @@ app.post('/api/workflows', async (req, res) => {
 
 app.get('/api/workflows', async (req, res) => {
   try {
-    const files = await fs.readdir(workflowsDir);
+    const files = await fs.readdir(path.join(__dirname, 'workflows'));
     const workflows = files.map(file => path.basename(file, '.json'));
     res.json(workflows);
   } catch (error) {
@@ -231,7 +152,7 @@ app.get('/api/workflows', async (req, res) => {
 app.get('/api/workflows/:name', async (req, res) => {
   try {
     const { name } = req.params;
-    const data = await fs.readFile(path.join(workflowsDir, `${name}.json`), 'utf8');
+    const data = await fs.readFile(path.join(__dirname, 'workflows', `${name}.json`), 'utf8');
     res.json(JSON.parse(data));
   } catch (error) {
     console.error('Error retrieving workflow:', error);
@@ -242,7 +163,7 @@ app.get('/api/workflows/:name', async (req, res) => {
 app.get('/api/workflows/:name/download', async (req, res) => {
   try {
     const { name } = req.params;
-    const filePath = path.join(workflowsDir, `${name}.json`);
+    const filePath = path.join(__dirname, 'workflows', `${name}.json`);
     res.download(filePath);
   } catch (error) {
     console.error('Error downloading workflow:', error);

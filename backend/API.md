@@ -1,4 +1,4 @@
-# Agentopia Backend API Documentation
+# Agentopia API Documentation
 
 This document outlines the API endpoints for the Agentopia backend server.
 
@@ -41,7 +41,7 @@ http://localhost:3000/api
 
 ### API Key Management
 
-#### POST /keys
+#### POST /api/keys
 - **Description**: Saves a new API key
 - **Request Body**:
   ```json
@@ -50,13 +50,13 @@ http://localhost:3000/api
     "value": "sk-..."
   }
   ```
-- **Response**: Confirmation message
+- **Response**: Confirmation message with key ID
 
-#### GET /keys
+#### GET /api/keys
 - **Description**: Retrieves a list of all saved API key names
 - **Response**: An array of API key names
 
-#### GET /keys/:name
+#### GET /api/keys/:name
 - **Description**: Retrieves a specific API key by name
 - **Response**: 
   ```json
@@ -65,66 +65,18 @@ http://localhost:3000/api
   }
   ```
 
-### Assistant Management
-
-#### POST /assistants
-- **Description**: Saves a new assistant
-- **Request Body**:
-  ```json
-  {
-    "name": "Assistant Name",
-    "id": "assistant-id"
-  }
-  ```
+#### DELETE /api/keys/:name
+- **Description**: Deletes a specific API key by name
 - **Response**: Confirmation message
-
-#### GET /assistants
-- **Description**: Retrieves a list of all saved assistant names
-- **Response**: An array of assistant names
-
-#### GET /assistants/:name
-- **Description**: Retrieves a specific assistant by name
-- **Response**: 
-  ```json
-  {
-    "id": "assistant-id"
-  }
-  ```
-
-### Thread Management
-
-#### POST /threads
-- **Description**: Saves a new thread
-- **Request Body**:
-  ```json
-  {
-    "name": "Thread Name",
-    "id": "thread-id"
-  }
-  ```
-- **Response**: Confirmation message
-
-#### GET /threads
-- **Description**: Retrieves a list of all saved thread names
-- **Response**: An array of thread names
-
-#### GET /threads/:name
-- **Description**: Retrieves a specific thread by name
-- **Response**: 
-  ```json
-  {
-    "id": "thread-id"
-  }
-  ```
 
 ### OpenAI API Integration
 
-#### POST /openai
+#### POST /api/openai
 - **Description**: Makes a call to the OpenAI API
 - **Request Body**:
   ```json
   {
-    "keyId": "api-key-name",
+    "keyName": "api-key-name",
     "model": "gpt-3.5-turbo",
     "messages": [
       {
@@ -142,13 +94,6 @@ http://localhost:3000/api
   }
   ```
 - **Response**: Returns the response from the OpenAI API
-- **Error Response**:
-  ```json
-  {
-    "error": "Error calling OpenAI API",
-    "details": "Error message"
-  }
-  ```
 
 ## Error Handling
 
@@ -159,17 +104,13 @@ All endpoints return appropriate HTTP status codes:
 - 404: Resource not found
 - 500: Internal server error
 
-Error responses include a JSON object with `error` and `details` fields providing more information about the error.
+Error responses include a JSON object with `error` and optionally `details` fields providing more information about the error.
 
-## Security
+## Authentication
 
-- API keys are encrypted before storage and decrypted when retrieved.
-- The server uses CORS to restrict access to allowed origins.
-- Sensitive operations should be performed over HTTPS in a production environment.
+Currently, the API uses a simple middleware for authentication. In a production environment, implement proper authentication (e.g., JWT) before using these endpoints.
 
 ## Notes
 
 - This API is designed for local development and testing. Additional security measures should be implemented for production use.
 - Ensure that the OpenAI API key used has the necessary permissions for the models and endpoints being accessed.
-
-Last updated: October 3, 2024

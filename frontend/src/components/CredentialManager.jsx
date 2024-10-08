@@ -27,18 +27,10 @@ const CredentialManager = ({ onClose }) => {
     }
   };
 
-  const verifyApiKey = (key) => {
-    return key.startsWith('sk-') && key.length > 20 && key.length < 100;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
-    if (activeTab === 'keys' && !verifyApiKey(newItemValue)) {
-      setError('Invalid API key format. It should start with "sk-" and be between 20-100 characters.');
-      return;
-    }
     try {
       const response = await fetch(`http://localhost:3000/api/${activeTab}`, {
         method: 'POST',

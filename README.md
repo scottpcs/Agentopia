@@ -9,18 +9,15 @@ Agentopia is an AI Workflow Proof of Concept application that allows users to cr
 - Integration with OpenAI API for AI model interactions
 - Support for multiple OpenAI models including GPT-4, GPT-3.5-Turbo, and their variants
 - Customizable node properties (e.g., AI model selection, system messages, temperature, max tokens)
-- Agent Wizard for configuring agent personalities
+- Secure API key management with encryption
 - Save and load functionality for workflows
 - Download workflows as JSON files
-- Real-time execution of AI workflows
-- Secure API key management with encryption
-- Workspace management for organizing multiple workflows
-- Credential management for API keys, assistants, and threads
 
 ## Prerequisites
 
 - Node.js (v14 or higher)
 - npm (v6 or higher)
+- PostgreSQL (v12 or higher)
 
 ## Setup
 
@@ -30,45 +27,50 @@ Agentopia is an AI Workflow Proof of Concept application that allows users to cr
    cd agentopia
    ```
 
-2. Install dependencies for both frontend and backend:
-   ```
-   cd frontend
-   npm install
-   cd ../backend
-   npm install
-   ```
-
-3. Set up environment variables:
-   Create a `.env` file in the `backend` directory with the following content:
-   ```
-   PORT=3000
-   ENCRYPTION_KEY=your_secret_encryption_key
-   ```
-   Replace `your_secret_encryption_key` with a secure random string.
-
-4. Start the backend server:
+2. Set up the backend:
    ```
    cd backend
-   node server.js
+   npm install
    ```
 
-5. In a new terminal, start the frontend development server:
+3. Set up the database:
+   - Create a PostgreSQL database named `agentopia`
+   - Create a user for the application or use an existing one
+
+4. Configure environment variables:
+   Create a `.env` file in the `backend` directory with the following content:
+   ```
+   DATABASE_URL=postgresql://username:password@localhost:5432/agentopia
+   ENCRYPTION_KEY=your_32_byte_encryption_key_here
+   ```
+   Replace `username`, `password`, and the encryption key with your actual values.
+
+5. Initialize the database:
+   ```
+   node -e "require('./encryptedKeyService.js').init().then(() => console.log('Initialization complete')).catch(console.error)"
+   ```
+
+6. Start the backend server:
+   ```
+   npm start
+   ```
+
+7. Set up the frontend (from the project root):
    ```
    cd frontend
+   npm install
    npm run dev
    ```
 
-6. Open your browser and navigate to `http://localhost:5173` to access the application.
+8. Open your browser and navigate to `http://localhost:5173` to access the application.
 
 ## Usage
 
 1. Use the toolbar on the left to add nodes to your workflow.
 2. Connect nodes by dragging from one node's output to another node's input.
 3. Configure node properties by selecting a node and using the property panel on the right.
-4. Use the Agent Wizard to configure agent personalities.
-5. Save your workflow using the "Save" button in the menu bar.
-6. Execute your workflow using the "Execute Workflow" button.
-7. Manage your API keys and other credentials using the Credential Manager.
+4. Save your workflow using the "Save" button in the menu bar.
+5. Execute your workflow using the "Execute Workflow" button.
 
 ## Contributing
 
@@ -77,10 +79,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- OpenAI for providing the API that powers the AI agents
-- React Flow for the workflow visualization library
-
-Last updated: October 3rd, 2024
