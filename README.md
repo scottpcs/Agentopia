@@ -6,12 +6,14 @@ Agentopia is an AI Workflow Proof of Concept application that allows users to cr
 
 - Visual representation of AI agent workflows
 - Drag-and-drop interface for adding and connecting agent nodes
+- Support for both AI and human agent nodes
 - Integration with OpenAI API for AI model interactions
 - Support for multiple OpenAI models including GPT-4, GPT-3.5-Turbo, and their variants
 - Customizable node properties (e.g., AI model selection, system messages, temperature, max tokens)
 - Secure API key management with encryption
 - Save and load functionality for workflows
 - Download workflows as JSON files
+- Real-time workflow execution
 
 ## Prerequisites
 
@@ -55,9 +57,9 @@ Agentopia is an AI Workflow Proof of Concept application that allows users to cr
    npm start
    ```
 
-7. Set up the frontend (from the project root):
+7. Set up the frontend:
    ```
-   cd frontend
+   cd ../frontend
    npm install
    npm run dev
    ```
@@ -66,7 +68,7 @@ Agentopia is an AI Workflow Proof of Concept application that allows users to cr
 
 ## Usage
 
-1. Use the toolbar on the left to add nodes to your workflow.
+1. Use the toolbar on the left to add AI or human agent nodes to your workflow.
 2. Connect nodes by dragging from one node's output to another node's input.
 3. Configure node properties by selecting a node and using the property panel on the right.
 4. Save your workflow using the "Save" button in the menu bar.

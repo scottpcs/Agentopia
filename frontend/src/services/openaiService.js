@@ -1,5 +1,7 @@
-export async function callOpenAI(keyId, model, messages, temperature, maxTokens, customInstructions) {
-  console.log('callOpenAI function called with:', { keyId, model, messages, temperature, maxTokens, customInstructions });
+// src/services/openaiService.js
+
+export async function callOpenAI(apiKeyName, model, messages, temperature, maxTokens, customInstructions) {
+  console.log('callOpenAI function called with:', { apiKeyName, model, messages, temperature, maxTokens, customInstructions });
   
   try {
     console.log('Sending request to /api/openai');
@@ -9,7 +11,7 @@ export async function callOpenAI(keyId, model, messages, temperature, maxTokens,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        keyId,
+        apiKeyName,
         model,
         messages,
         temperature,
@@ -40,5 +42,70 @@ export async function callOpenAI(keyId, model, messages, temperature, maxTokens,
     console.error('Error details:', error.message);
     console.error('Error stack:', error.stack);
     throw error;
+  }
+}
+
+// Helper function to validate OpenAI API key
+export async function validateApiKey(apiKey) {
+  try {
+    const response = await fetch('https://api.openai.com/v1/engines', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (response.ok) {
+      return true;
+    } else {
+      console.error('API key validation failed:', await response.text());
+      return false;
+    }
+  } catch (error) {
+    console.error('Error validating API key:', error);
+    return false;
+  }
+}
+
+// Function to get available models (this would need to be implemented on your backend)
+export async function getAvailableModels(apiKeyName) {
+  try {
+    const response = await fetch(`http://localhost:3000/api/models?apiKeyName=${apiKeyName}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.models;
+  } catch (error) {
+    console.error('Error fetching available models:', error);
+    throw error;
+  }
+}
+
+// Function to estimate token usage
+export function estimateTokenUsage(messages) {
+  // This is a very rough estimate. OpenAI's tokenization is more complex.
+  return messages.reduce((total, message) => {
+    return total + message.content.split(' ').length;
+  }, 0);
+}
+
+// Function to format OpenAI API response
+export function formatOpenAIResponse(response) {
+  if (response.choices && response.choices.length > 0) {
+    return response.choices[0].message.content.trim();
+  }
+  return 'No response generated.';
+}
+
+// Error handling wrapper
+export async function safeOpenAICall(apiCall) {
+  try {
+    return await apiCall();
+  } catch (error) {
+    console.error('OpenAI API call failed:', error);
+    if (error.response) {
+      console.error('OpenAI API error response:', error.response.data);
+    }
+    throw new Error('Failed to call OpenAI API: ' + error.message);
   }
 }

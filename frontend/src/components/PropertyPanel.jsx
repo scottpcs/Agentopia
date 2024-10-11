@@ -99,14 +99,14 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
               <Label htmlFor="apiKey">API Key</Label>
               <select
                 id="apiKey"
-                value={node.data.apiKeyId || ''}
-                onChange={(e) => handleChange('apiKeyId', e.target.value)}
+                value={node.data.apiKeyName || ''}
+                onChange={(e) => handleChange('apiKeyName', e.target.value)}
                 className="w-full p-2 border rounded"
               >
                 <option value="">Select API Key</option>
                 {apiKeys.map((key) => (
-                  <option key={key} value={key}>
-                    {key}
+                  <option key={key.id} value={key.name}>
+                    {key.name}
                   </option>
                 ))}
               </select>

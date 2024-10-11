@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
   addEdge,
@@ -12,7 +13,7 @@ import 'reactflow/dist/style.css';
 // Custom component imports
 import MenuBar from './components/MenuBar';
 import Toolbar from './components/Toolbar';
-import AgentNode from './components/AgentNode';
+import AgentNodeComponent from './components/AgentNodeComponent';
 import TextInputNode from './components/TextInputNode';
 import TextOutputNode from './components/TextOutputNode';
 import HumanInteractionNode from './components/HumanInteractionNode';
@@ -28,7 +29,9 @@ import './App.css';
 
 // Node Type Definitions
 const nodeTypes = {
-  agent: AgentNode,
+  agent: AgentNodeComponent,
+  ai: AgentNodeComponent,  // Add this line
+  human: AgentNodeComponent,  // Add this line
   textInput: TextInputNode,
   textOutput: TextOutputNode,
   humanInteraction: HumanInteractionNode,
@@ -65,28 +68,29 @@ const AiWorkflowPOC = () => {
 
   const onAddNode = useCallback((nodeType) => {
     if (!reactFlowInstance) return;
-
+  
     const position = reactFlowInstance.project({
       x: Math.random() * window.innerWidth / 2,
       y: Math.random() * window.innerHeight / 2,
     });
-
+  
     const newNode = {
       id: `${nodeType}-${Date.now()}`,
-      type: nodeType,
+      type: nodeType,  // This should now match the keys in nodeTypes
       position,
       data: { label: `New ${nodeType} Node` },
     };
-
+  
     switch (nodeType) {
-      case 'agent':
+      case 'ai':
+      case 'human':
         newNode.data = {
           ...newNode.data,
-          model: 'gpt-3.5-turbo',
-          systemMessage: 'You are a helpful assistant.',
-          temperature: 0.7,
-          maxTokens: 150,
-          apiKeyId: null,
+          model: nodeType === 'ai' ? 'gpt-3.5-turbo' : null,
+          systemMessage: nodeType === 'ai' ? 'You are a helpful assistant.' : null,
+          temperature: nodeType === 'ai' ? 0.7 : null,
+          maxTokens: nodeType === 'ai' ? 150 : null,
+          apiKeyId: nodeType === 'ai' ? null : null,
           customInstructions: '',
         };
         break;
@@ -109,7 +113,7 @@ const AiWorkflowPOC = () => {
         };
         break;
     }
-
+  
     setNodes((nds) => nds.concat(newNode));
   }, [reactFlowInstance, setNodes]);
 
@@ -424,7 +428,7 @@ const AiWorkflowPOC = () => {
           />
         </div>
       )}
-      {errorMessage && (
+{errorMessage && (
         <div className="error-message">
           {errorMessage}
           <button onClick={() => setErrorMessage('')}>Close</button>
@@ -466,4 +470,3 @@ const AiWorkflowPOC = () => {
 };
 
 export default AiWorkflowPOC;
-      

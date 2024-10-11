@@ -1,16 +1,15 @@
+// src/components/Toolbar.jsx
+
 import React from 'react';
 import { Button } from "./ui/button";
 
 const Toolbar = ({ onAddNode }) => {
   const nodeTypes = [
-    { type: 'agent', label: 'Agent Node' },
+    { type: 'ai', label: 'AI Agent' },
+    { type: 'human', label: 'Human Agent' },
     { type: 'textInput', label: 'Text Input' },
     { type: 'textOutput', label: 'Text Output' },
     { type: 'humanInteraction', label: 'Human Interaction' },
-    { type: 'textProcess', label: 'Text Process' },
-    { type: 'conditional', label: 'Conditional' },
-    { type: 'httpRequest', label: 'HTTP Request' },
-    { type: 'function', label: 'Function' },
   ];
 
   return (
