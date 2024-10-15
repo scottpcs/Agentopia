@@ -9,6 +9,7 @@ const MenuBar = ({
   currentWorkspace,
   onSetWorkspace,
   onExecuteWorkflow, 
+  onStopExecution,
   isExecuting,
   onShowCredentialManager
 }) => {
@@ -58,9 +59,21 @@ const MenuBar = ({
           Current Workspace: {currentWorkspace || 'Not set'}
         </div>
         <Button onClick={onSetWorkspace}>Set Workspace</Button>
-        <Button onClick={onExecuteWorkflow} disabled={isExecuting}>
-          {isExecuting ? 'Executing...' : 'Execute Workflow'}
-        </Button>
+        {isExecuting ? (
+          <Button 
+            onClick={onStopExecution} 
+            className="bg-red-500 hover:bg-red-600 text-white"
+          >
+            Stop Execution
+          </Button>
+        ) : (
+          <Button 
+            onClick={onExecuteWorkflow} 
+            className="bg-green-500 hover:bg-green-600 text-white"
+          >
+            Execute Workflow
+          </Button>
+        )}
         <Button onClick={onShowCredentialManager}>
           Manage Credentials
         </Button>

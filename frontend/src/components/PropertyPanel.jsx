@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import AgentWizardModal from './AgentWizardModal';
+import { Select } from "./ui/select";
+import CreativityAxes from './CreativityAxes';
+import { convertCreativityToModelSettings, generateCustomInstructions } from '../utils/creativityConverter';
 
 const modelOptions = [
   { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
@@ -14,12 +16,14 @@ const modelOptions = [
 ];
 
 const PropertyPanel = ({ node, onChange, onClose }) => {
+  const [localNode, setLocalNode] = useState(node);
   const [apiKeys, setApiKeys] = useState([]);
-  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [creativity, setCreativity] = useState({ x: 50, y: 50 });
 
   useEffect(() => {
+    setLocalNode(node);
     fetchApiKeys();
-  }, []);
+  }, [node]);
 
   const fetchApiKeys = async () => {
     try {
@@ -33,29 +37,26 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
   };
 
   const handleChange = (key, value) => {
-    onChange(node.id, { [key]: value });
+    setLocalNode(prev => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        [key]: value
+      }
+    }));
+    onChange(localNode.id, { [key]: value });
   };
 
-  const openWizard = () => {
-    setIsWizardOpen(true);
+  const handleCreativityChange = (newCreativity) => {
+    setCreativity(newCreativity);
+    const modelSettings = convertCreativityToModelSettings(newCreativity);
+    const customInstructions = generateCustomInstructions(newCreativity);
+    handleChange('temperature', modelSettings.temperature);
+    handleChange('maxTokens', modelSettings.maxTokens);
+    handleChange('customInstructions', customInstructions);
   };
 
-  const closeWizard = () => {
-    setIsWizardOpen(false);
-  };
-
-  const handleSavePersonality = (personalitySettings) => {
-    onChange(node.id, {
-      personality: personalitySettings.creativity,
-      modelSettings: personalitySettings.modelSettings,
-      customInstructions: personalitySettings.customInstructions,
-      temperature: personalitySettings.modelSettings.temperature,
-      maxTokens: personalitySettings.modelSettings.maxTokens,
-    });
-    closeWizard();
-  };
-
-  if (!node) return null;
+  if (!localNode) return null;
 
   return (
     <div className="property-panel fixed right-0 top-0 h-full w-96 bg-white shadow-lg p-4 overflow-y-auto">
@@ -64,44 +65,42 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
       
       <div className="space-y-4">
         <div>
-          <Label htmlFor="label">Label</Label>
+          <Label htmlFor="name">Name</Label>
           <Input
-            id="label"
-            value={node.data.label || ''}
-            onChange={(e) => handleChange('label', e.target.value)}
+            id="name"
+            value={localNode.data.name || ''}
+            onChange={(e) => handleChange('name', e.target.value)}
           />
         </div>
         
-        {node.type === 'agent' && (
+        {localNode.type === 'aiAgent' && (
           <>
             <div>
               <Label htmlFor="model">Model</Label>
-              <select
+              <Select
                 id="model"
-                value={node.data.model || 'gpt-3.5-turbo'}
+                value={localNode.data.model || 'gpt-3.5-turbo'}
                 onChange={(e) => handleChange('model', e.target.value)}
-                className="w-full p-2 border rounded"
               >
                 {modelOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
-              </select>
-              {node.data.model && (
+              </Select>
+              {localNode.data.model && (
                 <p className="text-sm text-gray-600 mt-1">
-                  {modelOptions.find(o => o.value === node.data.model)?.description}
+                  {modelOptions.find(o => o.value === localNode.data.model)?.description}
                 </p>
               )}
             </div>
             
             <div>
               <Label htmlFor="apiKey">API Key</Label>
-              <select
+              <Select
                 id="apiKey"
-                value={node.data.apiKeyName || ''}
-                onChange={(e) => handleChange('apiKeyName', e.target.value)}
-                className="w-full p-2 border rounded"
+                value={localNode.data.apiKeyId || ''}
+                onChange={(e) => handleChange('apiKeyId', e.target.value)}
               >
                 <option value="">Select API Key</option>
                 {apiKeys.map((key) => (
@@ -109,18 +108,7 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
                     {key.name}
                   </option>
                 ))}
-              </select>
-            </div>
-            
-            <div>
-              <Label htmlFor="systemMessage">System Message</Label>
-              <textarea
-                id="systemMessage"
-                value={node.data.systemMessage || ''}
-                onChange={(e) => handleChange('systemMessage', e.target.value)}
-                className="w-full p-2 border rounded"
-                rows={3}
-              />
+              </Select>
             </div>
             
             <div>
@@ -131,7 +119,7 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
                 step="0.1"
                 min="0"
                 max="2"
-                value={node.data.temperature || 0.7}
+                value={localNode.data.temperature || 0.7}
                 onChange={(e) => handleChange('temperature', parseFloat(e.target.value))}
               />
             </div>
@@ -143,8 +131,19 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
                 type="number"
                 step="1"
                 min="1"
-                value={node.data.maxTokens || 150}
+                value={localNode.data.maxTokens || 150}
                 onChange={(e) => handleChange('maxTokens', parseInt(e.target.value))}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="systemInstructions">System Instructions</Label>
+              <textarea
+                id="systemInstructions"
+                value={localNode.data.systemInstructions || ''}
+                onChange={(e) => handleChange('systemInstructions', e.target.value)}
+                className="w-full p-2 border rounded mt-1"
+                rows={4}
               />
             </div>
 
@@ -152,7 +151,7 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
               <Label htmlFor="customInstructions">Custom Instructions</Label>
               <textarea
                 id="customInstructions"
-                value={node.data.customInstructions || ''}
+                value={localNode.data.customInstructions || ''}
                 onChange={(e) => handleChange('customInstructions', e.target.value)}
                 className="w-full p-2 border rounded mt-1"
                 rows={4}
@@ -160,54 +159,69 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
             </div>
 
             <div>
-              <Button onClick={openWizard} className="w-full">
-                Configure Agent Personality
-              </Button>
+              <Label>Creativity Setting</Label>
+              <CreativityAxes value={creativity} onChange={handleCreativityChange} />
             </div>
-
-            {node.data.personality && (
-              <div className="mt-4 p-2 bg-gray-100 rounded">
-                <h4 className="font-semibold mb-2">Current Personality Settings:</h4>
-                <p>Creativity: X: {node.data.personality.x}, Y: {node.data.personality.y}</p>
-                <p>Temperature: {node.data.temperature.toFixed(2)}</p>
-                <p>Max Tokens: {node.data.maxTokens}</p>
-              </div>
-            )}
           </>
         )}
         
-        {node.type === 'textInput' && (
+        {localNode.type === 'humanAgent' && (
+          <>
+            <div>
+              <Label htmlFor="role">Role</Label>
+              <Input
+                id="role"
+                value={localNode.data.role || ''}
+                onChange={(e) => handleChange('role', e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={localNode.data.email || ''}
+                onChange={(e) => handleChange('email', e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={localNode.data.phone || ''}
+                onChange={(e) => handleChange('phone', e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        
+        {localNode.type === 'textInput' && (
           <div>
             <Label htmlFor="inputText">Input Text</Label>
             <textarea
               id="inputText"
-              value={node.data.inputText || ''}
+              value={localNode.data.inputText || ''}
               onChange={(e) => handleChange('inputText', e.target.value)}
-              className="w-full p-2 border rounded"
-              rows={3}
+              className="w-full p-2 border rounded mt-1"
+              rows={4}
             />
           </div>
         )}
         
-        {node.type === 'textOutput' && (
+        {localNode.type === 'textOutput' && (
           <div>
-            <Label htmlFor="outputText">Output Text</Label>
+            <Label htmlFor="outputText">Output Text (Read Only)</Label>
             <textarea
               id="outputText"
-              value={node.data.text || ''}
+              value={localNode.data.text || ''}
               readOnly
-              className="w-full p-2 border rounded bg-gray-100"
-              rows={3}
+              className="w-full p-2 border rounded mt-1 bg-gray-100"
+              rows={4}
             />
           </div>
         )}
       </div>
-
-      <AgentWizardModal 
-        isOpen={isWizardOpen} 
-        onClose={closeWizard}
-        onSave={handleSavePersonality}
-      />
     </div>
   );
 };

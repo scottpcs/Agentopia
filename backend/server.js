@@ -47,7 +47,11 @@ const apiLimiter = rateLimit({
 });
 
 // Apply rate limiting to all routes
-app.use(apiLimiter);
+// app.use(apiLimiter);
+// Temporarily disable rate limiting
+
+app.use((req, res, next) => next());
+
 
 // API Key Management
 app.post('/api/keys', authMiddleware, async (req, res) => {

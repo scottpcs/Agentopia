@@ -1,4 +1,3 @@
-// src/App.jsx
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
   addEdge,
@@ -17,7 +16,9 @@ import AgentNodeComponent from './components/AgentNodeComponent';
 import TextInputNode from './components/TextInputNode';
 import TextOutputNode from './components/TextOutputNode';
 import HumanInteractionNode from './components/HumanInteractionNode';
+import ContextProcessorNode from './components/ContextProcessorNode';
 import PropertyPanel from './components/PropertyPanel';
+import InteractionPanel from './components/InteractionPanel';
 import WorkspaceManager from './components/WorkspaceManager';
 import CredentialManager from './components/CredentialManager';
 
@@ -29,12 +30,12 @@ import './App.css';
 
 // Node Type Definitions
 const nodeTypes = {
-  agent: AgentNodeComponent,
-  ai: AgentNodeComponent,  // Add this line
-  human: AgentNodeComponent,  // Add this line
+  aiAgent: AgentNodeComponent,
+  humanAgent: AgentNodeComponent,
   textInput: TextInputNode,
   textOutput: TextOutputNode,
   humanInteraction: HumanInteractionNode,
+  contextProcessor: ContextProcessorNode,
 };
 
 const AiWorkflowPOC = () => {
@@ -49,7 +50,9 @@ const AiWorkflowPOC = () => {
   const [showWorkspaceManager, setShowWorkspaceManager] = useState(false);
   const [showCredentialManager, setShowCredentialManager] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
+  const [interactionMode, setInteractionMode] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [shouldStop, setShouldStop] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Effect Hooks
@@ -59,8 +62,38 @@ const AiWorkflowPOC = () => {
     fetchWorkflows();
   }, []);
 
+  useEffect(() => {
+    const reactFlowElement = reactFlowWrapper.current;
+    if (reactFlowElement) {
+      const preventDefault = (e) => {
+        e.preventDefault();
+      };
+
+      const addPassiveListener = (element, eventName) => {
+        element.addEventListener(eventName, preventDefault, { passive: true });
+      };
+
+      addPassiveListener(reactFlowElement, 'touchstart');
+      addPassiveListener(reactFlowElement, 'touchmove');
+
+      return () => {
+        reactFlowElement.removeEventListener('touchstart', preventDefault);
+        reactFlowElement.removeEventListener('touchmove', preventDefault);
+      };
+    }
+  }, []);
+
   // Callback Functions
-  const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
+  const onConnect = useCallback((params) => {
+    if (params.sourceHandle === 'contextOutput' || params.targetHandle === 'contextInput') {
+      setEdges((eds) => addEdge({
+        ...params,
+        style: { stroke: '#ff0072' },
+      }, eds));
+    } else {
+      setEdges((eds) => addEdge(params, eds));
+    }
+  }, [setEdges]);
 
   const onInit = useCallback((instance) => {
     setReactFlowInstance(instance);
@@ -68,30 +101,41 @@ const AiWorkflowPOC = () => {
 
   const onAddNode = useCallback((nodeType) => {
     if (!reactFlowInstance) return;
-  
+
     const position = reactFlowInstance.project({
-      x: Math.random() * window.innerWidth / 2,
-      y: Math.random() * window.innerHeight / 2,
+      x: Math.random() * window.innerWidth - 100,
+      y: Math.random() * window.innerHeight,
     });
-  
+
     const newNode = {
       id: `${nodeType}-${Date.now()}`,
-      type: nodeType,  // This should now match the keys in nodeTypes
+      type: nodeType,
       position,
       data: { label: `New ${nodeType} Node` },
     };
-  
+
     switch (nodeType) {
-      case 'ai':
-      case 'human':
+      case 'aiAgent':
         newNode.data = {
           ...newNode.data,
-          model: nodeType === 'ai' ? 'gpt-3.5-turbo' : null,
-          systemMessage: nodeType === 'ai' ? 'You are a helpful assistant.' : null,
-          temperature: nodeType === 'ai' ? 0.7 : null,
-          maxTokens: nodeType === 'ai' ? 150 : null,
-          apiKeyId: nodeType === 'ai' ? null : null,
+          name: `New AI Agent`,
+          agentType: 'ai',
+          model: 'gpt-3.5-turbo',
+          temperature: 0.7,
+          maxTokens: 150,
+          apiKeyId: null,
+          systemInstructions: 'You are a helpful assistant.',
           customInstructions: '',
+          context: [],
+        };
+        break;
+      case 'humanAgent':
+        newNode.data = {
+          ...newNode.data,
+          name: `New Human Agent`,
+          agentType: 'human',
+          role: 'Human Assistant',
+          context: [],
         };
         break;
       case 'textInput':
@@ -109,11 +153,18 @@ const AiWorkflowPOC = () => {
       case 'humanInteraction':
         newNode.data = {
           ...newNode.data,
+          name: `Human ${Date.now().toString().slice(-4)}`,
           ref: React.createRef(),
         };
         break;
+      case 'contextProcessor':
+        newNode.data = {
+          ...newNode.data,
+          label: 'Context Processor',
+        };
+        break;
     }
-  
+
     setNodes((nds) => nds.concat(newNode));
   }, [reactFlowInstance, setNodes]);
 
@@ -126,6 +177,14 @@ const AiWorkflowPOC = () => {
             data: {
               ...node.data,
               ...newData,
+              onChange: onNodeChange,
+              onContextOutput: (id, context) => {
+                console.log(`Context output from node ${id}:`, context);
+                const contextEdges = edges.filter(e => e.source === id && e.sourceHandle === 'contextOutput');
+                contextEdges.forEach(edge => {
+                  onNodeChange(edge.target, { contextInput: context });
+                });
+              },
             },
           };
         }
@@ -144,10 +203,7 @@ const AiWorkflowPOC = () => {
       }
       return prev;
     });
-
-    // Force a re-render of the nodes
-    setNodes((nds) => [...nds]);
-  }, [setNodes]);
+  }, [setNodes, edges]);
 
   const onNodesDelete = useCallback(
     (deleted) => {
@@ -155,6 +211,7 @@ const AiWorkflowPOC = () => {
         !deleted.some((node) => node.id === edge.source || node.id === edge.target)
       ));
       setSelectedNode(null);
+      setInteractionMode(null);
     },
     [setEdges]
   );
@@ -165,6 +222,30 @@ const AiWorkflowPOC = () => {
     },
     [setEdges]
   );
+
+  const onNodeClick = useCallback((event, node) => {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON') {
+      return;
+    }
+    setSelectedNode(node);
+    setInteractionMode('interact');
+  }, []);
+
+  const onNodeContextMenu = useCallback((event, node) => {
+    event.preventDefault();
+    setSelectedNode(node);
+    setInteractionMode('properties');
+  }, []);
+
+  const onPanelClose = useCallback(() => {
+    setSelectedNode(null);
+    setInteractionMode(null);
+  }, []);
+
+  const onBackgroundClick = useCallback(() => {
+    setSelectedNode(null);
+    setInteractionMode(null);
+  }, []);
 
   // Workflow Management Functions
   const fetchWorkflows = useCallback(async () => {
@@ -195,7 +276,7 @@ const AiWorkflowPOC = () => {
         if (!response.ok) throw new Error('Failed to save workflow');
         
         console.log('Workflow saved successfully');
-        fetchWorkflows(); // Refresh the list of workflows
+        fetchWorkflows();
       } catch (error) {
         console.error('Error saving workflow:', error);
         setErrorMessage('Failed to save workflow');
@@ -238,166 +319,149 @@ const AiWorkflowPOC = () => {
     console.log(`Workspace set to: ${workspacePath}`);
   }, [recentWorkspaces]);
 
-  // Node Interaction
-  const onNodeClick = useCallback((event, node) => {
-    setSelectedNode(node);
-  }, []);
-
-  const onPanelClose = useCallback(() => {
-    setSelectedNode(null);
-  }, []);
-
-  const onBackgroundClick = useCallback(() => {
-    setSelectedNode(null);
-  }, []);
-
   // Workflow Execution
   const executeWorkflow = useCallback(async () => {
     setIsExecuting(true);
     setErrorMessage('');
-    const nodesCopy = [...nodes];
-    const edgesCopy = [...edges];
+    setShouldStop(false);
 
-    console.log('Starting workflow execution');
-    console.log('All nodes:', nodesCopy);
-    console.log('All edges:', edgesCopy);
+    const executionPromises = [];
 
-    const executedNodes = new Set();
-    const nodeOutputs = new Map();
-
-    const executeNode = async (nodeId) => {
-      console.log(`Executing node: ${nodeId}`);
-      if (executedNodes.has(nodeId)) {
-        console.log(`Node ${nodeId} already executed, returning cached output`);
-        return nodeOutputs.get(nodeId);
+    const executeNode = async (nodeId, input = '', context = []) => {
+      if (shouldStop) {
+        console.log('Execution stopped');
+        return null;
       }
 
-      const node = nodesCopy.find(n => n.id === nodeId);
+      const node = nodes.find(n => n.id === nodeId);
       if (!node) {
         console.log(`Node ${nodeId} not found`);
         return null;
       }
 
+      console.log(`Executing node: ${nodeId}, Input:`, input);
       console.log(`Node ${nodeId} data:`, node.data);
-
-      let inputText = '';
-
-      // Gather inputs from all incoming edges
-      const incomingEdges = edgesCopy.filter(e => e.target === nodeId);
-      console.log(`Incoming edges for node ${nodeId}:`, incomingEdges);
-      for (const edge of incomingEdges) {
-        console.log(`Processing edge: ${edge.source} -> ${edge.target}`);
-        const sourceOutput = await executeNode(edge.source);
-        console.log(`Output from source node ${edge.source}:`, sourceOutput);
-        inputText += sourceOutput ? sourceOutput + ' ' : '';
-      }
-      console.log(`Combined input for node ${nodeId}:`, inputText);
 
       let output = '';
 
       switch (node.type) {
-        case 'textInput':
-          output = node.data.inputText || '';
-          console.log(`TextInput node ${nodeId} output:`, output);
-          break;
-        case 'agent':
+        case 'aiAgent':
           const { 
             apiKeyId, 
             model, 
-            systemMessage, 
             temperature,
             maxTokens,
-            customInstructions 
+            systemInstructions,
+            customInstructions,
+            name
           } = node.data;
-          console.log(`Agent node ${nodeId} data:`, { apiKeyId, model, systemMessage, temperature, maxTokens, customInstructions });
           const messages = [
-            { role: 'system', content: systemMessage || 'You are a helpful assistant.' },
-            { role: 'user', content: inputText }
+            { role: 'system', content: systemInstructions || 'You are a helpful assistant.' },
+            ...context,
+            { role: 'user', content: customInstructions || '' },
+            { role: 'user', content: input }
           ];
-          console.log(`Calling OpenAI for node ${nodeId} with:`, { 
-            apiKeyId, 
-            model, 
-            messages, 
-            temperature, 
-            maxTokens, 
-            customInstructions 
-          });
-
+          console.log(`Calling OpenAI for node ${nodeId} with:`, { apiKeyId, model, messages, temperature, maxTokens });
           try {
             output = await callOpenAI(
               apiKeyId, 
               model, 
               messages, 
               temperature, 
-              maxTokens, 
-              customInstructions
+              maxTokens
             );
             console.log(`OpenAI response for node ${nodeId}:`, output);
+            // When sending the output to the next node (if it's a HumanInteractionNode), include the agent's name
+            const nextNode = nodes.find(n => edges.some(e => e.source === nodeId && e.target === n.id));
+            if (nextNode && nextNode.type === 'humanInteraction') {
+              nextNode.data.ref.current.handleReceive(output, name || 'AI Agent');
+            }
           } catch (error) {
             console.error(`Error calling OpenAI for node ${nodeId}:`, error);
             setErrorMessage(`Error calling OpenAI API for node ${nodeId}: ${error.message}`);
             output = `Error: ${error.message}`;
           }
           break;
-        case 'textOutput':
-          output = inputText;
-          console.log(`TextOutput node ${nodeId} setting text to:`, output);
-          setNodes(prevNodes => prevNodes.map(n => 
-            n.id === nodeId ? { ...n, data: { ...n.data, text: inputText } } : n
-          ));
-          break;
         case 'humanInteraction':
-          // For human interaction, we'll need to wait for user input
-          // This is a simplified implementation and might need to be adjusted
-          // based on how you want to handle user interactions during execution
-          node.data.ref.current.handleReceive(inputText);
+          const mergedContext = [...(node.data.contextInput || []), ...context];
+          onNodeChange(nodeId, { contextInput: mergedContext });
+          
+          if (input) {
+            node.data.ref.current.handleReceive(input, 'System');
+          }
           output = await new Promise(resolve => {
-            const handleSend = (message) => {
-              resolve(message);
+            const handleSend = (nodeId, message, updatedContext) => {
+              console.log(`Human interaction node ${nodeId} sent message:`, message);
+              resolve({ message, context: updatedContext });
             };
-            // You might want to implement a way to cancel this promise if needed
-            node.data.ref.current.onSend = handleSend;
+            onNodeChange(nodeId, { 
+              onSend: handleSend,
+              onContextOutput: (id, updatedContext) => {
+                const contextEdges = edges.filter(e => e.source === id && e.sourceHandle === 'contextOutput');
+                contextEdges.forEach(edge => {
+                  onNodeChange(edge.target, { contextInput: updatedContext });
+                });
+              }
+            });
           });
-          console.log(`HumanInteraction node ${nodeId} output:`, output);
+          console.log(`Human interaction node ${nodeId} output:`, output);
+          break;
+        case 'textInput':
+          output = node.data.inputText || '';
+          console.log(`TextInput node ${nodeId} output:`, output);
+          break;
+        case 'textOutput':
+          if (Array.isArray(input)) {
+            output = input.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+          } else {
+            output = input;
+          }
+          console.log(`TextOutput node ${nodeId} setting text to:`, output);
+          onNodeChange(nodeId, { text: output });
+          break;
+        case 'contextProcessor':
+          output = { context: context };
           break;
         default:
           console.log(`Unhandled node type: ${node.type}`);
       }
 
-      executedNodes.add(nodeId);
-      nodeOutputs.set(nodeId, output);
-      console.log(`Node ${nodeId} execution complete. Output:`, output);
-
-      // Execute all connected nodes
-      const outgoingEdges = edgesCopy.filter(e => e.source === nodeId);
+      const outgoingEdges = edges.filter(e => e.source === nodeId);
       for (const edge of outgoingEdges) {
-        await executeNode(edge.target);
+        const nextNodeId = edge.target;
+        if (edge.sourceHandle === 'contextOutput' || edge.targetHandle === 'contextInput') {
+          executionPromises.push(executeNode(nextNodeId, '', output.context || context));
+        } else {
+          executionPromises.push(executeNode(nextNodeId, output.message || output, output.context || context));
+        }
       }
 
       return output;
     };
 
     try {
-      // Find all nodes without incoming edges (start nodes)
-      const startNodes = nodesCopy.filter(node => 
-        !edgesCopy.some(edge => edge.target === node.id)
-      );
-      console.log('Start nodes:', startNodes);
-
-      // Execute the workflow starting from each start node
+      const startNodes = nodes.filter(node => node.type === 'textInput' || node.type === 'humanInteraction');
       for (const startNode of startNodes) {
         console.log(`Starting execution from node: ${startNode.id}`);
-        await executeNode(startNode.id);
+        executionPromises.push(executeNode(startNode.id));
       }
 
+      await Promise.all(executionPromises);
       console.log('Workflow execution completed');
     } catch (error) {
       console.error('Error executing workflow:', error);
       setErrorMessage(`Error executing workflow: ${error.message}`);
     } finally {
       setIsExecuting(false);
+      setShouldStop(false);
     }
-  }, [nodes, edges, setNodes]);
+  }, [nodes, edges, onNodeChange, shouldStop]);
+
+  const stopExecution = useCallback(() => {
+    console.log('Stopping execution...');
+    setShouldStop(true);
+    setIsExecuting(false);
+  }, []);
 
   // Render
   return (
@@ -410,6 +474,7 @@ const AiWorkflowPOC = () => {
         currentWorkspace={workspace}
         onSetWorkspace={() => setShowWorkspaceManager(true)}
         onExecuteWorkflow={executeWorkflow}
+        onStopExecution={stopExecution}
         isExecuting={isExecuting}
         onShowCredentialManager={() => setShowCredentialManager(true)}
       />
@@ -428,10 +493,16 @@ const AiWorkflowPOC = () => {
           />
         </div>
       )}
-{errorMessage && (
-        <div className="error-message">
-          {errorMessage}
-          <button onClick={() => setErrorMessage('')}>Close</button>
+      {errorMessage && (
+        <div className="error-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{errorMessage}</span>
+          <span className="absolute top-0 bottom-0 right-0 px-4 py-3">
+            <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" onClick={() => setErrorMessage('')}>
+              <title>Close</title>
+              <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/>
+            </svg>
+          </span>
         </div>
       )}
       <div className="main-content">
@@ -448,6 +519,7 @@ const AiWorkflowPOC = () => {
             onNodesDelete={onNodesDelete}
             onEdgesDelete={onEdgesDelete}
             onNodeClick={onNodeClick}
+            onNodeContextMenu={onNodeContextMenu}
             onPaneClick={onBackgroundClick}
             deleteKeyCode={['Backspace', 'Delete']}
             fitView
@@ -457,11 +529,24 @@ const AiWorkflowPOC = () => {
             <Background variant="dots" gap={12} size={1} />
           </ReactFlow>
         </div>
-        {selectedNode && (
+        {selectedNode && interactionMode === 'properties' && (
           <PropertyPanel
             node={selectedNode}
             onChange={onNodeChange}
-            onClose={onPanelClose}
+            onClose={() => {
+              setSelectedNode(null);
+              setInteractionMode(null);
+            }}
+          />
+        )}
+        {selectedNode && interactionMode === 'interact' && (
+          <InteractionPanel
+            node={selectedNode}
+            onChange={onNodeChange}
+            onClose={() => {
+              setSelectedNode(null);
+              setInteractionMode(null);
+            }}
           />
         )}
       </div>

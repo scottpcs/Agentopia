@@ -1,25 +1,39 @@
-// src/services/openaiService.test.js
-import { callOpenAI } from './openaiService.js';
+// src/services/openaiService.js
 
-// Replace with your actual API key
-const API_KEY = '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';
-
-async function testOpenAIService() {
+export async function callOpenAI(apiKeyName, model, messages, temperature, maxTokens) {
+  console.log('Calling OpenAI with:', { apiKeyName, model, messages, temperature, maxTokens });
+  
   try {
-    const response = await callOpenAI(
-      API_KEY,
-      'gpt-3.5-turbo',
-      [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'user', content: 'Hello, how are you?' }
-      ],
-      0.7,
-      50
-    );
-    console.log('OpenAI API Response:', response);
+    const response = await fetch('http://localhost:3000/api/openai', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        apiKeyName,
+        model,
+        messages,
+        temperature,
+        maxTokens
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Successful response from /api/openai:', data);
+
+    if (data.choices && data.choices.length > 0 && data.choices[0].message) {
+      return data.choices[0].message.content;
+    } else {
+      console.error('Unexpected response structure:', data);
+      throw new Error('Unexpected response structure from OpenAI API');
+    }
   } catch (error) {
-    console.error('Error testing OpenAI service:', error);
+    console.error('Error in callOpenAI:', error);
+    throw error;
   }
 }
-
-testOpenAIService();

@@ -12,43 +12,50 @@
  */
 
 // src/components/TextOutputNode.jsx
-
-import React, { useState, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
-import { Button } from "./ui/button";
 
 const TextOutputNode = ({ data, isConnectable }) => {
-  const [showFullText, setShowFullText] = useState(false);
-
-  const toggleFullText = useCallback(() => {
-    setShowFullText(prev => !prev);
-  }, []);
-
-  const previewText = data.text 
-    ? data.text.split(' ').slice(0, 10).join(' ') + '...'
-    : 'No output yet';
+  useEffect(() => {
+    if (data.contextInput) {
+      // Convert context array to a string for display
+      const contextString = data.contextInput
+        .map(msg => `${msg.role}: ${msg.content}`)
+        .join('\n');
+      data.onChange(data.id, { text: contextString });
+    } else if (data.input) {
+      // Handle regular input
+      data.onChange(data.id, { text: data.input });
+    }
+  }, [data.contextInput, data.input, data.onChange, data.id]);
 
   return (
     <div className="text-output-node p-2 rounded-md bg-white border border-gray-300">
-      <Handle type="target" position={Position.Top} id="input" isConnectable={isConnectable} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="input"
+        style={{ background: '#555' }}
+        isConnectable={isConnectable}
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="contextInput"
+        style={{ background: '#ff0072' }}
+        isConnectable={isConnectable}
+      />
       <div className="font-bold mb-2">{data.label}</div>
       <div className="p-2 bg-gray-100 rounded min-h-[50px] max-w-[200px] overflow-hidden">
-        {previewText}
+        {data.text || 'No output yet'}
       </div>
-      <Button onClick={toggleFullText} className="mt-2">
-        View Full Text
-      </Button>
-      {showFullText && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg max-w-2xl max-h-[80vh] overflow-auto">
-            <h3 className="font-bold mb-2">Full Output</h3>
-            <pre className="whitespace-pre-wrap">{data.text}</pre>
-            <Button onClick={toggleFullText} className="mt-4">
-              Close
-            </Button>
-          </div>
-        </div>
-      )}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="output"
+        style={{ background: '#555' }}
+        isConnectable={isConnectable}
+      />
     </div>
   );
 };

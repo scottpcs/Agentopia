@@ -30,9 +30,15 @@ class AgentNode extends BaseNode {
   }
 
   async processAI(inputData) {
-    this.data.context.push({ role: 'user', content: inputData });
+    // Parse the input data to extract any structured information
+    const { text, structuredData } = this.parseInput(inputData);
+
+    // Update the context with the new input
+    this.data.context.push({ role: 'user', content: text });
+
+    // Prepare the messages for the API call
     const messages = [
-      { role: 'system', content: this.data.instructions },
+      { role: 'system', content: this.generateSystemMessage() },
       ...this.data.context
     ];
 
@@ -45,30 +51,69 @@ class AgentNode extends BaseNode {
         this.data.maxTokens
       );
       
-      this.data.context.push({ role: 'assistant', content: response });
-      this.updateStructuredOutput(response);
+      // Parse the response and update the structured output
+      const { text: responseText, structuredData: responseData } = this.parseOutput(response);
       
-      return response;
+      this.data.context.push({ role: 'assistant', content: responseText });
+      this.updateStructuredOutput(responseData);
+      
+      // Combine the response text with any structured data
+      return {
+        text: responseText,
+        structuredData: this.data.structuredOutput
+      };
     } catch (error) {
       console.error('Error in AI processing:', error);
-      return `Error: ${error.message}`;
+      return { text: `Error: ${error.message}`, structuredData: {} };
     }
   }
 
   processHuman(inputData) {
-    this.data.context.push({ role: 'human', content: inputData });
-    return inputData; // In a real implementation, this would wait for actual human input
+    // For human nodes, we simply pass through the input
+    // In a real implementation, this might involve waiting for actual human input
+    this.data.context.push({ role: 'human', content: inputData.text });
+    return inputData;
   }
 
-  updateStructuredOutput(response) {
-    // This is a simplified parser. In a real implementation, you'd use more sophisticated NLP techniques
-    const lines = response.split('\n');
-    lines.forEach(line => {
-      const [key, value] = line.split(':');
-      if (key && value) {
-        this.data.structuredOutput[key.trim()] = value.trim();
+  generateSystemMessage() {
+    // Combine the role and instructions to create a comprehensive system message
+    return `You are a ${this.data.role}. ${this.data.instructions}\n\nPlease format any structured data in your response using JSON, enclosed in triple backticks.`;
+  }
+
+  parseInput(inputData) {
+    // If the input is already structured, return it as is
+    if (typeof inputData === 'object' && inputData.text) {
+      return inputData;
+    }
+    // Otherwise, assume it's just text
+    return { text: inputData, structuredData: {} };
+  }
+
+  parseOutput(response) {
+    const jsonRegex = /```json\n([\s\S]*?)\n```/;
+    const match = response.match(jsonRegex);
+    
+    let structuredData = {};
+    let text = response;
+
+    if (match) {
+      try {
+        structuredData = JSON.parse(match[1]);
+        // Remove the JSON block from the text
+        text = response.replace(match[0], '').trim();
+      } catch (error) {
+        console.error('Error parsing JSON from response:', error);
       }
-    });
+    }
+
+    return { text, structuredData };
+  }
+
+  updateStructuredOutput(newData) {
+    this.data.structuredOutput = {
+      ...this.data.structuredOutput,
+      ...newData
+    };
   }
 
   getStructuredOutput() {

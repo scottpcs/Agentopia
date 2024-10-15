@@ -69,7 +69,10 @@
   /* ----------------
      React Flow Styles
      ---------------- */
-  
+  .react-flow {
+    touch-action: none;
+  }
+
   .reactflow-wrapper {
     flex-grow: 1;
     height: 100%;

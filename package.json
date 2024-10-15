@@ -19,6 +19,7 @@
     "express": "^4.21.0",
     "pg": "^8.13.0",
     "react-modal": "^3.16.1",
+    "reactflow": "^11.11.4",
     "tailwind-merge": "^2.5.3",
     "zustand": "^5.0.0-rc.2"
   }
