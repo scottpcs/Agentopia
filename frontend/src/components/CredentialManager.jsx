@@ -1,31 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 const CredentialManager = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState('keys');
-  const [items, setItems] = useState([]);
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemValue, setNewItemValue] = useState('');
-  const [expiresAt, setExpiresAt] = useState('');
-  const [usageLimit, setUsageLimit] = useState('');
+  const [apiKeys, setApiKeys] = useState([]);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyValue, setNewKeyValue] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    fetchItems();
-  }, [activeTab]);
+    fetchApiKeys();
+  }, []);
 
-  const fetchItems = async () => {
+  const fetchApiKeys = async () => {
     try {
-      const response = await fetch(`http://localhost:3000/api/${activeTab}`);
+      const response = await fetch('http://localhost:3000/api/keys');
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
-      setItems(data);
+      setApiKeys(data);
     } catch (error) {
-      console.error(`Error fetching ${activeTab}:`, error);
-      setError(`Failed to fetch ${activeTab}. Please try again.`);
+      console.error('Error fetching API keys:', error);
+      setError('Failed to fetch API keys. Please try again.');
     }
   };
 
@@ -34,138 +31,88 @@ const CredentialManager = ({ onClose }) => {
     setError('');
     setSuccess('');
     try {
-      const response = await fetch(`http://localhost:3000/api/${activeTab}`, {
+      const response = await fetch('http://localhost:3000/api/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          name: newItemName, 
-          value: newItemValue,
-          expiresAt: expiresAt || null,
-          usageLimit: usageLimit ? parseInt(usageLimit) : null
+          name: newKeyName, 
+          value: newKeyValue,
         }),
       });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.details || `Failed to save ${activeTab.slice(0, -1)}`);
+        throw new Error(errorData.details || 'Failed to save API key');
       }
-      setNewItemName('');
-      setNewItemValue('');
-      setExpiresAt('');
-      setUsageLimit('');
-      setSuccess(`${activeTab.slice(0, -1)} saved successfully`);
-      fetchItems();
+      setNewKeyName('');
+      setNewKeyValue('');
+      setSuccess('API key saved successfully');
+      fetchApiKeys();
     } catch (error) {
-      console.error(`Error saving ${activeTab.slice(0, -1)}:`, error);
-      setError(`Failed to save ${activeTab.slice(0, -1)}: ${error.message}`);
+      console.error('Error saving API key:', error);
+      setError(`Failed to save API key: ${error.message}`);
     }
   };
 
   const handleDelete = async (name) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/${activeTab}/${name}`, {
+      const response = await fetch(`http://localhost:3000/api/keys/${name}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      setSuccess(`${activeTab.slice(0, -1)} deleted successfully`);
-      fetchItems();
+      setSuccess('API key deleted successfully');
+      fetchApiKeys();
     } catch (error) {
-      console.error(`Error deleting ${activeTab.slice(0, -1)}:`, error);
-      setError(`Failed to delete ${activeTab.slice(0, -1)}: ${error.message}`);
+      console.error('Error deleting API key:', error);
+      setError(`Failed to delete API key: ${error.message}`);
     }
   };
 
   return (
-    <div className="credential-manager p-4 bg-white shadow-lg rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Credential Manager</h2>
-        <Button onClick={onClose} variant="outline">Close</Button>
-      </div>
+    <div className="credential-manager p-4 bg-white shadow-lg rounded-lg max-w-md w-full">
+      <h2 className="text-xl font-bold mb-4">API Key Manager</h2>
       
-      <div className="tabs mb-4 flex space-x-2">
-        <Button 
-          onClick={() => setActiveTab('keys')} 
-          variant={activeTab === 'keys' ? 'default' : 'outline'}
-        >
-          API Keys
-        </Button>
-        <Button 
-          onClick={() => setActiveTab('assistants')} 
-          variant={activeTab === 'assistants' ? 'default' : 'outline'}
-        >
-          Assistants
-        </Button>
-        <Button 
-          onClick={() => setActiveTab('threads')} 
-          variant={activeTab === 'threads' ? 'default' : 'outline'}
-        >
-          Threads
-        </Button>
-      </div>
-
       {error && <div className="error-message mb-4 text-red-500">{error}</div>}
       {success && <div className="success-message mb-4 text-green-500">{success}</div>}
 
       <form onSubmit={handleSubmit} className="mb-4 space-y-4">
         <div>
-          <Label htmlFor="itemName">Name:</Label>
+          <Label htmlFor="keyName">Key Name:</Label>
           <Input
-            id="itemName"
-            value={newItemName}
-            onChange={(e) => setNewItemName(e.target.value)}
+            id="keyName"
+            value={newKeyName}
+            onChange={(e) => setNewKeyName(e.target.value)}
             required
           />
         </div>
         <div>
-          <Label htmlFor="itemValue">{activeTab === 'keys' ? 'API Key' : 'ID'}:</Label>
+          <Label htmlFor="keyValue">API Key:</Label>
           <Input
-            id="itemValue"
-            value={newItemValue}
-            onChange={(e) => setNewItemValue(e.target.value)}
+            id="keyValue"
+            value={newKeyValue}
+            onChange={(e) => setNewKeyValue(e.target.value)}
             required
-            type={activeTab === 'keys' ? 'password' : 'text'}
+            type="password"
           />
         </div>
-        {activeTab === 'keys' && (
-          <>
-            <div>
-              <Label htmlFor="expiresAt">Expires At (optional):</Label>
-              <Input
-                id="expiresAt"
-                type="datetime-local"
-                value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="usageLimit">Usage Limit (optional):</Label>
-              <Input
-                id="usageLimit"
-                type="number"
-                value={usageLimit}
-                onChange={(e) => setUsageLimit(e.target.value)}
-                min="1"
-              />
-            </div>
-          </>
-        )}
-        <Button type="submit">Save {activeTab.slice(0, -1)}</Button>
+        <Button type="submit">Save API Key</Button>
       </form>
 
-      <div className="items-list">
-        <h3 className="font-semibold mb-2">Saved {activeTab}:</h3>
-        {items.length > 0 ? (
+      <div className="api-keys-list">
+        <h3 className="font-semibold mb-2">Saved API Keys:</h3>
+        {apiKeys.length > 0 ? (
           <ul className="space-y-2">
-            {items.map((item, index) => (
-              <li key={index} className="flex justify-between items-center">
-                <span>{item.name || item}</span>
-                <Button onClick={() => handleDelete(item.name || item)} variant="destructive">Delete</Button>
+            {apiKeys.map((key) => (
+              <li key={key.id} className="flex justify-between items-center">
+                <span>{key.name}</span>
+                <Button onClick={() => handleDelete(key.name)} variant="destructive">Delete</Button>
               </li>
             ))}
           </ul>
         ) : (
-          <p>No {activeTab} saved yet.</p>
+          <p>No API keys saved yet.</p>
         )}
       </div>
+      <Button onClick={onClose} className="mt-4">Close</Button>
     </div>
   );
 };

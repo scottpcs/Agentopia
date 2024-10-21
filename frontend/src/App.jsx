@@ -11,34 +11,22 @@ import 'reactflow/dist/style.css';
 
 // Custom component imports
 import MenuBar from './components/MenuBar';
-import Toolbar from './components/Toolbar';
-import AgentNodeComponent from './components/AgentNodeComponent';
-import TextInputNode from './components/TextInputNode';
-import TextOutputNode from './components/TextOutputNode';
-import HumanInteractionNode from './components/HumanInteractionNode';
-import ContextProcessorNode from './components/ContextProcessorNode';
+import Sidebar from './components/Sidebar';
 import PropertyPanel from './components/PropertyPanel';
 import InteractionPanel from './components/InteractionPanel';
 import WorkspaceManager from './components/WorkspaceManager';
 import CredentialManager from './components/CredentialManager';
+import AgentBuilder from './components/AgentBuilder';
+import { nodeTypes } from './components/nodeTypes';
 
 // Service imports
 import { callOpenAI } from './services/openaiService';
+import { executeWorkflow, stopWorkflowExecution } from './utils/workflowExecutionEngine';
 
 // Styles
 import './App.css';
 
-// Node Type Definitions
-const nodeTypes = {
-  aiAgent: AgentNodeComponent,
-  humanAgent: AgentNodeComponent,
-  textInput: TextInputNode,
-  textOutput: TextOutputNode,
-  humanInteraction: HumanInteractionNode,
-  contextProcessor: ContextProcessorNode,
-};
-
-const AiWorkflowPOC = () => {
+const App = () => {
   // State Declarations
   const reactFlowWrapper = useRef(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -49,124 +37,73 @@ const AiWorkflowPOC = () => {
   const [savedWorkflows, setSavedWorkflows] = useState([]);
   const [showWorkspaceManager, setShowWorkspaceManager] = useState(false);
   const [showCredentialManager, setShowCredentialManager] = useState(false);
+  const [showAgentBuilder, setShowAgentBuilder] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
   const [interactionMode, setInteractionMode] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [shouldStop, setShouldStop] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [agents, setAgents] = useState([]);
+  const [apiKeys, setApiKeys] = useState([]);
+  const [availableAgentTypes] = useState(['ai', 'human', 'expert']);
 
   // Effect Hooks
   useEffect(() => {
     const storedWorkspaces = JSON.parse(localStorage.getItem('recentWorkspaces') || '[]');
     setRecentWorkspaces(storedWorkspaces);
     fetchWorkflows();
+    fetchAgents();
+    fetchApiKeys();
   }, []);
 
   useEffect(() => {
-    const reactFlowElement = reactFlowWrapper.current;
-    if (reactFlowElement) {
-      const preventDefault = (e) => {
-        e.preventDefault();
-      };
-
-      const addPassiveListener = (element, eventName) => {
-        element.addEventListener(eventName, preventDefault, { passive: true });
-      };
-
-      addPassiveListener(reactFlowElement, 'touchstart');
-      addPassiveListener(reactFlowElement, 'touchmove');
-
-      return () => {
-        reactFlowElement.removeEventListener('touchstart', preventDefault);
-        reactFlowElement.removeEventListener('touchmove', preventDefault);
-      };
-    }
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setSelectedNode(null);
+        setInteractionMode(null);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
   // Callback Functions
-  const onConnect = useCallback((params) => {
-    if (params.sourceHandle === 'contextOutput' || params.targetHandle === 'contextInput') {
-      setEdges((eds) => addEdge({
-        ...params,
-        style: { stroke: '#ff0072' },
-      }, eds));
-    } else {
-      setEdges((eds) => addEdge(params, eds));
-    }
-  }, [setEdges]);
+  const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
 
-  const onInit = useCallback((instance) => {
-    setReactFlowInstance(instance);
+  const onInit = useCallback((instance) => setReactFlowInstance(instance), []);
+
+  const onDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const onAddNode = useCallback((nodeType) => {
-    if (!reactFlowInstance) return;
+  const onDrop = useCallback(
+    (event) => {
+      event.preventDefault();
 
-    const position = reactFlowInstance.project({
-      x: Math.random() * window.innerWidth - 100,
-      y: Math.random() * window.innerHeight,
-    });
+      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      const type = event.dataTransfer.getData('application/reactflow');
 
-    const newNode = {
-      id: `${nodeType}-${Date.now()}`,
-      type: nodeType,
-      position,
-      data: { label: `New ${nodeType} Node` },
-    };
+      // check if the dropped element is valid
+      if (typeof type === 'undefined' || !type) {
+        return;
+      }
 
-    switch (nodeType) {
-      case 'aiAgent':
-        newNode.data = {
-          ...newNode.data,
-          name: `New AI Agent`,
-          agentType: 'ai',
-          model: 'gpt-3.5-turbo',
-          temperature: 0.7,
-          maxTokens: 150,
-          apiKeyId: null,
-          systemInstructions: 'You are a helpful assistant.',
-          customInstructions: '',
-          context: [],
-        };
-        break;
-      case 'humanAgent':
-        newNode.data = {
-          ...newNode.data,
-          name: `New Human Agent`,
-          agentType: 'human',
-          role: 'Human Assistant',
-          context: [],
-        };
-        break;
-      case 'textInput':
-        newNode.data = {
-          ...newNode.data,
-          inputText: '',
-        };
-        break;
-      case 'textOutput':
-        newNode.data = {
-          ...newNode.data,
-          text: '',
-        };
-        break;
-      case 'humanInteraction':
-        newNode.data = {
-          ...newNode.data,
-          name: `Human ${Date.now().toString().slice(-4)}`,
-          ref: React.createRef(),
-        };
-        break;
-      case 'contextProcessor':
-        newNode.data = {
-          ...newNode.data,
-          label: 'Context Processor',
-        };
-        break;
-    }
+      const position = reactFlowInstance.project({
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
+      });
 
-    setNodes((nds) => nds.concat(newNode));
-  }, [reactFlowInstance, setNodes]);
+      const newNode = {
+        id: `${type}-${Date.now()}`,
+        type,
+        position,
+        data: { label: `New ${type} node` },
+      };
+
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [reactFlowInstance]
+  );
 
   const onNodeChange = useCallback((nodeId, newData) => {
     setNodes((nds) =>
@@ -204,24 +141,6 @@ const AiWorkflowPOC = () => {
       return prev;
     });
   }, [setNodes, edges]);
-
-  const onNodesDelete = useCallback(
-    (deleted) => {
-      setEdges((eds) => eds.filter((edge) => 
-        !deleted.some((node) => node.id === edge.source || node.id === edge.target)
-      ));
-      setSelectedNode(null);
-      setInteractionMode(null);
-    },
-    [setEdges]
-  );
-
-  const onEdgesDelete = useCallback(
-    (deleted) => {
-      setEdges((eds) => eds.filter((edge) => !deleted.includes(edge)));
-    },
-    [setEdges]
-  );
 
   const onNodeClick = useCallback((event, node) => {
     if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON') {
@@ -265,16 +184,13 @@ const AiWorkflowPOC = () => {
       const flow = reactFlowInstance.toObject();
       const name = prompt('Enter a name for this workflow:');
       if (!name) return;
-
       try {
         const response = await fetch('http://localhost:3000/api/workflows', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, data: flow }),
         });
-
         if (!response.ok) throw new Error('Failed to save workflow');
-        
         console.log('Workflow saved successfully');
         fetchWorkflows();
       } catch (error) {
@@ -311,156 +227,91 @@ const AiWorkflowPOC = () => {
   const onSetWorkspace = useCallback((workspacePath) => {
     setWorkspace(workspacePath);
     setShowWorkspaceManager(false);
-    
     const updatedWorkspaces = [workspacePath, ...recentWorkspaces.filter(w => w !== workspacePath)].slice(0, 5);
     setRecentWorkspaces(updatedWorkspaces);
     localStorage.setItem('recentWorkspaces', JSON.stringify(updatedWorkspaces));
-    
     console.log(`Workspace set to: ${workspacePath}`);
   }, [recentWorkspaces]);
 
   // Workflow Execution
-  const executeWorkflow = useCallback(async () => {
+  const onExecuteWorkflow = useCallback(async () => {
     setIsExecuting(true);
     setErrorMessage('');
-    setShouldStop(false);
-
-    const executionPromises = [];
-
-    const executeNode = async (nodeId, input = '', context = []) => {
-      if (shouldStop) {
-        console.log('Execution stopped');
-        return null;
-      }
-
-      const node = nodes.find(n => n.id === nodeId);
-      if (!node) {
-        console.log(`Node ${nodeId} not found`);
-        return null;
-      }
-
-      console.log(`Executing node: ${nodeId}, Input:`, input);
-      console.log(`Node ${nodeId} data:`, node.data);
-
-      let output = '';
-
-      switch (node.type) {
-        case 'aiAgent':
-          const { 
-            apiKeyId, 
-            model, 
-            temperature,
-            maxTokens,
-            systemInstructions,
-            customInstructions,
-            name
-          } = node.data;
-          const messages = [
-            { role: 'system', content: systemInstructions || 'You are a helpful assistant.' },
-            ...context,
-            { role: 'user', content: customInstructions || '' },
-            { role: 'user', content: input }
-          ];
-          console.log(`Calling OpenAI for node ${nodeId} with:`, { apiKeyId, model, messages, temperature, maxTokens });
-          try {
-            output = await callOpenAI(
-              apiKeyId, 
-              model, 
-              messages, 
-              temperature, 
-              maxTokens
-            );
-            console.log(`OpenAI response for node ${nodeId}:`, output);
-            // When sending the output to the next node (if it's a HumanInteractionNode), include the agent's name
-            const nextNode = nodes.find(n => edges.some(e => e.source === nodeId && e.target === n.id));
-            if (nextNode && nextNode.type === 'humanInteraction') {
-              nextNode.data.ref.current.handleReceive(output, name || 'AI Agent');
-            }
-          } catch (error) {
-            console.error(`Error calling OpenAI for node ${nodeId}:`, error);
-            setErrorMessage(`Error calling OpenAI API for node ${nodeId}: ${error.message}`);
-            output = `Error: ${error.message}`;
-          }
-          break;
-        case 'humanInteraction':
-          const mergedContext = [...(node.data.contextInput || []), ...context];
-          onNodeChange(nodeId, { contextInput: mergedContext });
-          
-          if (input) {
-            node.data.ref.current.handleReceive(input, 'System');
-          }
-          output = await new Promise(resolve => {
-            const handleSend = (nodeId, message, updatedContext) => {
-              console.log(`Human interaction node ${nodeId} sent message:`, message);
-              resolve({ message, context: updatedContext });
-            };
-            onNodeChange(nodeId, { 
-              onSend: handleSend,
-              onContextOutput: (id, updatedContext) => {
-                const contextEdges = edges.filter(e => e.source === id && e.sourceHandle === 'contextOutput');
-                contextEdges.forEach(edge => {
-                  onNodeChange(edge.target, { contextInput: updatedContext });
-                });
-              }
-            });
-          });
-          console.log(`Human interaction node ${nodeId} output:`, output);
-          break;
-        case 'textInput':
-          output = node.data.inputText || '';
-          console.log(`TextInput node ${nodeId} output:`, output);
-          break;
-        case 'textOutput':
-          if (Array.isArray(input)) {
-            output = input.map(msg => `${msg.role}: ${msg.content}`).join('\n');
-          } else {
-            output = input;
-          }
-          console.log(`TextOutput node ${nodeId} setting text to:`, output);
-          onNodeChange(nodeId, { text: output });
-          break;
-        case 'contextProcessor':
-          output = { context: context };
-          break;
-        default:
-          console.log(`Unhandled node type: ${node.type}`);
-      }
-
-      const outgoingEdges = edges.filter(e => e.source === nodeId);
-      for (const edge of outgoingEdges) {
-        const nextNodeId = edge.target;
-        if (edge.sourceHandle === 'contextOutput' || edge.targetHandle === 'contextInput') {
-          executionPromises.push(executeNode(nextNodeId, '', output.context || context));
-        } else {
-          executionPromises.push(executeNode(nextNodeId, output.message || output, output.context || context));
-        }
-      }
-
-      return output;
-    };
-
     try {
-      const startNodes = nodes.filter(node => node.type === 'textInput' || node.type === 'humanInteraction');
-      for (const startNode of startNodes) {
-        console.log(`Starting execution from node: ${startNode.id}`);
-        executionPromises.push(executeNode(startNode.id));
-      }
-
-      await Promise.all(executionPromises);
+      await executeWorkflow(nodes, edges, onNodeChange);
       console.log('Workflow execution completed');
     } catch (error) {
       console.error('Error executing workflow:', error);
       setErrorMessage(`Error executing workflow: ${error.message}`);
     } finally {
       setIsExecuting(false);
-      setShouldStop(false);
     }
-  }, [nodes, edges, onNodeChange, shouldStop]);
+  }, [nodes, edges, onNodeChange]);
 
-  const stopExecution = useCallback(() => {
-    console.log('Stopping execution...');
-    setShouldStop(true);
+  const onStopExecution = useCallback(() => {
+    stopWorkflowExecution();
     setIsExecuting(false);
+  }, []);
+
+  // Agent Management
+  const fetchAgents = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/agents');
+      if (!response.ok) {
+        throw new Error('Failed to fetch agents');
+      }
+      const fetchedAgents = await response.json();
+      setAgents(fetchedAgents);
+    } catch (error) {
+      console.error('Error fetching agents:', error);
+      setErrorMessage('Failed to fetch agents. Using default agents.');
+      setAgents([
+        { id: 'default-ai', name: 'Default AI Agent', type: 'ai' },
+        { id: 'default-human', name: 'Default Human Agent', type: 'human' },
+      ]);
+    }
+  }, []);
+
+  const onAddAgent = useCallback((agent) => {
+    if (agent) {
+      const newNode = {
+        id: `aiAgent-${Date.now()}`,
+        type: 'aiAgent',
+        position: { x: 100, y: 100 },
+        data: { ...agent, label: agent.name },
+      };
+      setNodes((nds) => nds.concat(newNode));
+    } else {
+      setShowAgentBuilder(true);
+    }
+  }, [setNodes]);
+
+  const handleCreateAgent = useCallback(() => {
+    setShowAgentBuilder(true);
+  }, []);
+
+  const handleSaveAgent = useCallback((newAgent) => {
+    setAgents(prevAgents => [...prevAgents, { ...newAgent, id: Date.now().toString() }]);
+    setShowAgentBuilder(false);
+  }, []);
+
+  const handleCloseAgentBuilder = useCallback(() => {
+    setShowAgentBuilder(false);
+  }, []);
+
+  // API Key Management
+  const fetchApiKeys = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/keys');
+      if (!response.ok) {
+        throw new Error('Failed to fetch API keys');
+      }
+      const keys = await response.json();
+      setApiKeys(keys);
+    } catch (error) {
+      console.error('Error fetching API keys:', error);
+      setErrorMessage('Failed to fetch API keys. Please check your connection.');
+    }
   }, []);
 
   // Render
@@ -473,8 +324,8 @@ const AiWorkflowPOC = () => {
         savedWorkflows={savedWorkflows}
         currentWorkspace={workspace}
         onSetWorkspace={() => setShowWorkspaceManager(true)}
-        onExecuteWorkflow={executeWorkflow}
-        onStopExecution={stopExecution}
+        onExecuteWorkflow={onExecuteWorkflow}
+        onStopExecution={onStopExecution}
         isExecuting={isExecuting}
         onShowCredentialManager={() => setShowCredentialManager(true)}
       />
@@ -493,6 +344,15 @@ const AiWorkflowPOC = () => {
           />
         </div>
       )}
+      {showAgentBuilder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <AgentBuilder
+            onSave={handleSaveAgent}
+            onClose={handleCloseAgentBuilder}
+            availableAgentTypes={availableAgentTypes}
+          />
+        </div>
+      )}
       {errorMessage && (
         <div className="error-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
           <strong className="font-bold">Error: </strong>
@@ -506,7 +366,11 @@ const AiWorkflowPOC = () => {
         </div>
       )}
       <div className="main-content">
-        <Toolbar onAddNode={onAddNode} />
+        <Sidebar 
+          agents={agents} 
+          onAddAgent={onAddAgent}
+          onCreateAgent={handleCreateAgent}
+        />
         <div className="reactflow-wrapper" ref={reactFlowWrapper}>
           <ReactFlow
             nodes={nodes}
@@ -516,8 +380,8 @@ const AiWorkflowPOC = () => {
             onConnect={onConnect}
             onInit={onInit}
             nodeTypes={nodeTypes}
-            onNodesDelete={onNodesDelete}
-            onEdgesDelete={onEdgesDelete}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
             onNodeClick={onNodeClick}
             onNodeContextMenu={onNodeContextMenu}
             onPaneClick={onBackgroundClick}
@@ -533,20 +397,15 @@ const AiWorkflowPOC = () => {
           <PropertyPanel
             node={selectedNode}
             onChange={onNodeChange}
-            onClose={() => {
-              setSelectedNode(null);
-              setInteractionMode(null);
-            }}
+            onClose={onPanelClose}
+            apiKeys={apiKeys}
           />
         )}
         {selectedNode && interactionMode === 'interact' && (
           <InteractionPanel
             node={selectedNode}
             onChange={onNodeChange}
-            onClose={() => {
-              setSelectedNode(null);
-              setInteractionMode(null);
-            }}
+            onClose={onPanelClose}
           />
         )}
       </div>
@@ -554,4 +413,4 @@ const AiWorkflowPOC = () => {
   );
 };
 
-export default AiWorkflowPOC;
+export default App;

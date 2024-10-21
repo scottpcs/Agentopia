@@ -3,8 +3,6 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Select } from "./ui/select";
-import CreativityAxes from './CreativityAxes';
-import { convertCreativityToModelSettings, generateCustomInstructions } from '../utils/creativityConverter';
 
 const modelOptions = [
   { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
@@ -15,26 +13,12 @@ const modelOptions = [
   { value: 'gpt-3.5-turbo-16k', label: 'GPT-3.5 Turbo 16k', description: 'GPT-3.5 Turbo with extended 16k token context' },
 ];
 
-const PropertyPanel = ({ node, onChange, onClose }) => {
+const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
   const [localNode, setLocalNode] = useState(node);
-  const [apiKeys, setApiKeys] = useState([]);
-  const [creativity, setCreativity] = useState({ x: 50, y: 50 });
 
   useEffect(() => {
     setLocalNode(node);
-    fetchApiKeys();
   }, [node]);
-
-  const fetchApiKeys = async () => {
-    try {
-      const response = await fetch('http://localhost:3000/api/keys');
-      if (!response.ok) throw new Error('Failed to fetch API keys');
-      const keys = await response.json();
-      setApiKeys(keys);
-    } catch (error) {
-      console.error('Error fetching API keys:', error);
-    }
-  };
 
   const handleChange = (key, value) => {
     setLocalNode(prev => ({
@@ -45,15 +29,6 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
       }
     }));
     onChange(localNode.id, { [key]: value });
-  };
-
-  const handleCreativityChange = (newCreativity) => {
-    setCreativity(newCreativity);
-    const modelSettings = convertCreativityToModelSettings(newCreativity);
-    const customInstructions = generateCustomInstructions(newCreativity);
-    handleChange('temperature', modelSettings.temperature);
-    handleChange('maxTokens', modelSettings.maxTokens);
-    handleChange('customInstructions', customInstructions);
   };
 
   if (!localNode) return null;
@@ -76,12 +51,29 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
         {localNode.type === 'aiAgent' && (
           <>
             <div>
+              <Label htmlFor="apiKeyId">API Key</Label>
+              <Select
+                id="apiKeyId"
+                value={localNode.data.apiKeyId || ''}
+                onChange={(e) => handleChange('apiKeyId', e.target.value)}
+              >
+                <option value="">Select API Key</option>
+                {apiKeys.map((key) => (
+                  <option key={key.id} value={key.name}>
+                    {key.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
               <Label htmlFor="model">Model</Label>
               <Select
                 id="model"
-                value={localNode.data.model || 'gpt-3.5-turbo'}
+                value={localNode.data.model || ''}
                 onChange={(e) => handleChange('model', e.target.value)}
               >
+                <option value="">Select Model</option>
                 {modelOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -93,22 +85,6 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
                   {modelOptions.find(o => o.value === localNode.data.model)?.description}
                 </p>
               )}
-            </div>
-            
-            <div>
-              <Label htmlFor="apiKey">API Key</Label>
-              <Select
-                id="apiKey"
-                value={localNode.data.apiKeyId || ''}
-                onChange={(e) => handleChange('apiKeyId', e.target.value)}
-              >
-                <option value="">Select API Key</option>
-                {apiKeys.map((key) => (
-                  <option key={key.id} value={key.name}>
-                    {key.name}
-                  </option>
-                ))}
-              </Select>
             </div>
             
             <div>
@@ -146,22 +122,6 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
                 rows={4}
               />
             </div>
-
-            <div>
-              <Label htmlFor="customInstructions">Custom Instructions</Label>
-              <textarea
-                id="customInstructions"
-                value={localNode.data.customInstructions || ''}
-                onChange={(e) => handleChange('customInstructions', e.target.value)}
-                className="w-full p-2 border rounded mt-1"
-                rows={4}
-              />
-            </div>
-
-            <div>
-              <Label>Creativity Setting</Label>
-              <CreativityAxes value={creativity} onChange={handleCreativityChange} />
-            </div>
           </>
         )}
         
@@ -176,26 +136,18 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
               />
             </div>
             <div>
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={localNode.data.email || ''}
-                onChange={(e) => handleChange('email', e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="phone">Phone</Label>
-              <Input
-                id="phone"
-                type="tel"
-                value={localNode.data.phone || ''}
-                onChange={(e) => handleChange('phone', e.target.value)}
+              <Label htmlFor="instructions">Instructions</Label>
+              <textarea
+                id="instructions"
+                value={localNode.data.instructions || ''}
+                onChange={(e) => handleChange('instructions', e.target.value)}
+                className="w-full p-2 border rounded mt-1"
+                rows={4}
               />
             </div>
           </>
         )}
-        
+
         {localNode.type === 'textInput' && (
           <div>
             <Label htmlFor="inputText">Input Text</Label>
@@ -217,6 +169,19 @@ const PropertyPanel = ({ node, onChange, onClose }) => {
               value={localNode.data.text || ''}
               readOnly
               className="w-full p-2 border rounded mt-1 bg-gray-100"
+              rows={4}
+            />
+          </div>
+        )}
+
+        {localNode.type === 'humanInteraction' && (
+          <div>
+            <Label htmlFor="instructions">Instructions</Label>
+            <textarea
+              id="instructions"
+              value={localNode.data.instructions || ''}
+              onChange={(e) => handleChange('instructions', e.target.value)}
+              className="w-full p-2 border rounded mt-1"
               rows={4}
             />
           </div>

@@ -2,6 +2,10 @@
 
 Agentopia is an AI Workflow Proof of Concept application that allows users to create, manage, and execute complex workflows involving AI agents, human agents, and text processing nodes.
 
+## Value Proposition
+
+Agentopia empowers users to visually design and execute complex AI workflows that seamlessly integrate AI agents and human interactions in real-time, enabling efficient collaboration and automation without the need for extensive coding expertise.
+
 ## Features
 
 - Visual node-based interface for creating AI workflows

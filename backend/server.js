@@ -47,11 +47,7 @@ const apiLimiter = rateLimit({
 });
 
 // Apply rate limiting to all routes
-// app.use(apiLimiter);
-// Temporarily disable rate limiting
-
-app.use((req, res, next) => next());
-
+app.use(apiLimiter);
 
 // API Key Management
 app.post('/api/keys', authMiddleware, async (req, res) => {
@@ -223,6 +219,24 @@ app.get('/api/workflows/:name/download', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error downloading workflow:', error);
     res.status(500).json({ error: 'Error downloading workflow' });
+  }
+});
+
+// New route for fetching agents
+app.get('/api/agents', authMiddleware, async (req, res) => {
+  try {
+    // For now, we'll return a static list of agents
+    // In the future, this could be fetched from a database
+    const agents = [
+      { id: 'ai-agent-1', name: 'General AI Assistant', type: 'ai' },
+      { id: 'ai-agent-2', name: 'Code Review AI', type: 'ai' },
+      { id: 'human-agent-1', name: 'Project Manager', type: 'human' },
+      { id: 'human-agent-2', name: 'Software Developer', type: 'human' },
+    ];
+    res.json(agents);
+  } catch (error) {
+    console.error('Error fetching agents:', error);
+    res.status(500).json({ error: 'Error fetching agents' });
   }
 });
 
