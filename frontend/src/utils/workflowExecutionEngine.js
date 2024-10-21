@@ -32,6 +32,19 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
         onNodeChange(nodeId, { text: input });
         output = input;
         break;
+      case 'humanInteraction':
+        // For human interaction nodes, we might want to pause execution and wait for input
+        // This is a simplified version; you might want to implement a more sophisticated system
+        output = await new Promise(resolve => {
+          onNodeChange(nodeId, { 
+            waitingForInput: true, 
+            resolveInput: (humanInput) => {
+              onNodeChange(nodeId, { waitingForInput: false, lastOutput: humanInput });
+              resolve(humanInput);
+            }
+          });
+        });
+        break;
       // Add more cases for other node types as needed
       default:
         console.warn(`Unhandled node type: ${node.type}`);
@@ -56,4 +69,12 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
 export const stopWorkflowExecution = () => {
   // Implement logic to stop the workflow execution
   console.log('Workflow execution stopped');
+};
+
+// Helper function to handle human interaction
+export const handleHumanInteraction = (nodeId, input) => {
+  const node = nodes.find(n => n.id === nodeId);
+  if (node && node.data.resolveInput) {
+    node.data.resolveInput(input);
+  }
 };
