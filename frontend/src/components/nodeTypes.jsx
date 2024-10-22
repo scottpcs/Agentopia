@@ -1,13 +1,14 @@
-// src/components/nodeTypes.jsx
-
-import ConversationNode from './ConversationNode';
+import AIAgentNode from './AIAgentNode';
+import HumanInteractionNode from './HumanInteractionNode';
 import TextInputNode from './TextInputNode';
 import TextOutputNode from './TextOutputNode';
-// Import other custom node types here
+import ConversationNode from './ConversationNode';
 
 export const nodeTypes = {
-  conversationNode: ConversationNode,
-  textInputNode: TextInputNode,
-  textOutputNode: TextOutputNode,
-  // Add other custom node types here
+  aiAgent: AIAgentNode,
+  humanAgent: HumanInteractionNode,
+  humanInteraction: HumanInteractionNode,  // Added this mapping
+  textInput: TextInputNode,
+  textOutput: TextOutputNode,
+  conversation: ConversationNode,
 };

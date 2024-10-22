@@ -11,12 +11,13 @@ import 'reactflow/dist/style.css';
 
 // Custom component imports
 import MenuBar from './components/MenuBar';
-import Sidebar from './components/Sidebar';
+import Sidebar from './components/SideBar';
 import PropertyPanel from './components/PropertyPanel';
 import InteractionPanel from './components/InteractionPanel';
 import WorkspaceManager from './components/WorkspaceManager';
 import CredentialManager from './components/CredentialManager';
 import AgentBuilder from './components/AgentBuilder';
+import ReactFlowWrapper from './components/ReactFlowWrapper';
 import { nodeTypes } from './components/nodeTypes';
 
 // Service imports
@@ -67,9 +68,14 @@ const App = () => {
   }, []);
 
   // Callback Functions
-  const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
+  const onConnect = useCallback(
+    (params) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
 
-  const onInit = useCallback((instance) => setReactFlowInstance(instance), []);
+  const onInit = useCallback((instance) => {
+    setReactFlowInstance(instance);
+  }, []);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -80,17 +86,14 @@ const App = () => {
     (event) => {
       event.preventDefault();
 
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
       const type = event.dataTransfer.getData('application/reactflow');
-
-      // check if the dropped element is valid
       if (typeof type === 'undefined' || !type) {
         return;
       }
 
-      const position = reactFlowInstance.project({
-        x: event.clientX - reactFlowBounds.left,
-        y: event.clientY - reactFlowBounds.top,
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
       });
 
       const newNode = {
@@ -102,7 +105,7 @@ const App = () => {
 
       setNodes((nds) => nds.concat(newNode));
     },
-    [reactFlowInstance]
+    [reactFlowInstance, setNodes]
   );
 
   const onNodeChange = useCallback((nodeId, newData) => {
@@ -115,32 +118,13 @@ const App = () => {
               ...node.data,
               ...newData,
               onChange: onNodeChange,
-              onContextOutput: (id, context) => {
-                console.log(`Context output from node ${id}:`, context);
-                const contextEdges = edges.filter(e => e.source === id && e.sourceHandle === 'contextOutput');
-                contextEdges.forEach(edge => {
-                  onNodeChange(edge.target, { contextInput: context });
-                });
-              },
             },
           };
         }
         return node;
       })
     );
-    setSelectedNode((prev) => {
-      if (prev && prev.id === nodeId) {
-        return {
-          ...prev,
-          data: {
-            ...prev.data,
-            ...newData,
-          },
-        };
-      }
-      return prev;
-    });
-  }, [setNodes, edges]);
+  }, [setNodes]);
 
   const onNodeClick = useCallback((event, node) => {
     if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON') {
@@ -156,12 +140,12 @@ const App = () => {
     setInteractionMode('properties');
   }, []);
 
-  const onPanelClose = useCallback(() => {
+  const onBackgroundClick = useCallback(() => {
     setSelectedNode(null);
     setInteractionMode(null);
   }, []);
 
-  const onBackgroundClick = useCallback(() => {
+  const onPanelClose = useCallback(() => {
     setSelectedNode(null);
     setInteractionMode(null);
   }, []);
@@ -180,23 +164,24 @@ const App = () => {
   }, []);
 
   const onSave = useCallback(async () => {
-    if (reactFlowInstance) {
+    if (!reactFlowInstance) return;
+    
+    const name = prompt('Enter a name for this workflow:');
+    if (!name) return;
+    
+    try {
       const flow = reactFlowInstance.toObject();
-      const name = prompt('Enter a name for this workflow:');
-      if (!name) return;
-      try {
-        const response = await fetch('http://localhost:3000/api/workflows', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, data: flow }),
-        });
-        if (!response.ok) throw new Error('Failed to save workflow');
-        console.log('Workflow saved successfully');
-        fetchWorkflows();
-      } catch (error) {
-        console.error('Error saving workflow:', error);
-        setErrorMessage('Failed to save workflow');
-      }
+      const response = await fetch('http://localhost:3000/api/workflows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, data: flow }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to save workflow');
+      await fetchWorkflows();
+    } catch (error) {
+      console.error('Error saving workflow:', error);
+      setErrorMessage('Failed to save workflow');
     }
   }, [reactFlowInstance, fetchWorkflows]);
 
@@ -207,68 +192,34 @@ const App = () => {
       const flow = await response.json();
       setNodes(flow.nodes || []);
       setEdges(flow.edges || []);
-      console.log('Workflow loaded successfully');
     } catch (error) {
       console.error('Error loading workflow:', error);
       setErrorMessage('Failed to load workflow');
     }
   }, [setNodes, setEdges]);
 
-  const onDownload = useCallback(async (name) => {
-    try {
-      window.open(`http://localhost:3000/api/workflows/${name}/download`);
-    } catch (error) {
-      console.error('Error downloading workflow:', error);
-      setErrorMessage('Failed to download workflow');
-    }
-  }, []);
-
   // Workspace Management
   const onSetWorkspace = useCallback((workspacePath) => {
     setWorkspace(workspacePath);
     setShowWorkspaceManager(false);
-    const updatedWorkspaces = [workspacePath, ...recentWorkspaces.filter(w => w !== workspacePath)].slice(0, 5);
+    const updatedWorkspaces = [
+      workspacePath,
+      ...recentWorkspaces.filter(w => w !== workspacePath)
+    ].slice(0, 5);
     setRecentWorkspaces(updatedWorkspaces);
     localStorage.setItem('recentWorkspaces', JSON.stringify(updatedWorkspaces));
-    console.log(`Workspace set to: ${workspacePath}`);
   }, [recentWorkspaces]);
-
-  // Workflow Execution
-  const onExecuteWorkflow = useCallback(async () => {
-    setIsExecuting(true);
-    setErrorMessage('');
-    try {
-      await executeWorkflow(nodes, edges, onNodeChange);
-      console.log('Workflow execution completed');
-    } catch (error) {
-      console.error('Error executing workflow:', error);
-      setErrorMessage(`Error executing workflow: ${error.message}`);
-    } finally {
-      setIsExecuting(false);
-    }
-  }, [nodes, edges, onNodeChange]);
-
-  const onStopExecution = useCallback(() => {
-    stopWorkflowExecution();
-    setIsExecuting(false);
-  }, []);
 
   // Agent Management
   const fetchAgents = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:3000/api/agents');
-      if (!response.ok) {
-        throw new Error('Failed to fetch agents');
-      }
+      if (!response.ok) throw new Error('Failed to fetch agents');
       const fetchedAgents = await response.json();
       setAgents(fetchedAgents);
     } catch (error) {
       console.error('Error fetching agents:', error);
-      setErrorMessage('Failed to fetch agents. Using default agents.');
-      setAgents([
-        { id: 'default-ai', name: 'Default AI Agent', type: 'ai' },
-        { id: 'default-human', name: 'Default Human Agent', type: 'human' },
-      ]);
+      setErrorMessage('Failed to fetch agents');
     }
   }, []);
 
@@ -303,15 +254,32 @@ const App = () => {
   const fetchApiKeys = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:3000/api/keys');
-      if (!response.ok) {
-        throw new Error('Failed to fetch API keys');
-      }
+      if (!response.ok) throw new Error('Failed to fetch API keys');
       const keys = await response.json();
       setApiKeys(keys);
     } catch (error) {
       console.error('Error fetching API keys:', error);
-      setErrorMessage('Failed to fetch API keys. Please check your connection.');
+      setErrorMessage('Failed to fetch API keys');
     }
+  }, []);
+
+  // Workflow Execution
+  const onExecuteWorkflow = useCallback(async () => {
+    setIsExecuting(true);
+    setErrorMessage('');
+    try {
+      await executeWorkflow(nodes, edges, onNodeChange);
+    } catch (error) {
+      console.error('Error executing workflow:', error);
+      setErrorMessage(`Error executing workflow: ${error.message}`);
+    } finally {
+      setIsExecuting(false);
+    }
+  }, [nodes, edges, onNodeChange]);
+
+  const onStopExecution = useCallback(() => {
+    stopWorkflowExecution();
+    setIsExecuting(false);
   }, []);
 
   // Render
@@ -320,7 +288,6 @@ const App = () => {
       <MenuBar 
         onSave={onSave}
         onLoad={onLoad}
-        onDownload={onDownload}
         savedWorkflows={savedWorkflows}
         currentWorkspace={workspace}
         onSetWorkspace={() => setShowWorkspaceManager(true)}
@@ -329,50 +296,26 @@ const App = () => {
         isExecuting={isExecuting}
         onShowCredentialManager={() => setShowCredentialManager(true)}
       />
-      {showWorkspaceManager && (
-        <WorkspaceManager 
-          onSetWorkspace={onSetWorkspace}
-          recentWorkspaces={recentWorkspaces}
-          onSelectRecentWorkspace={onSetWorkspace}
-          onClose={() => setShowWorkspaceManager(false)}
-        />
-      )}
-      {showCredentialManager && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <CredentialManager 
-            onClose={() => setShowCredentialManager(false)}
-          />
-        </div>
-      )}
-      {showAgentBuilder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <AgentBuilder
-            onSave={handleSaveAgent}
-            onClose={handleCloseAgentBuilder}
-            availableAgentTypes={availableAgentTypes}
-          />
-        </div>
-      )}
-      {errorMessage && (
-        <div className="error-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">{errorMessage}</span>
-          <span className="absolute top-0 bottom-0 right-0 px-4 py-3">
-            <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" onClick={() => setErrorMessage('')}>
-              <title>Close</title>
-              <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/>
-            </svg>
-          </span>
-        </div>
-      )}
+
       <div className="main-content">
         <Sidebar 
           agents={agents} 
           onAddAgent={onAddAgent}
           onCreateAgent={handleCreateAgent}
         />
-        <div className="reactflow-wrapper" ref={reactFlowWrapper}>
-          <ReactFlow
+        
+        <div 
+          className="flow-container" 
+          ref={reactFlowWrapper}
+          style={{ 
+            touchAction: 'none',
+            WebkitUserSelect: 'none',
+            MozUserSelect: 'none',
+            msUserSelect: 'none',
+            userSelect: 'none'
+          }}
+          >
+          <ReactFlowWrapper
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
@@ -388,11 +331,12 @@ const App = () => {
             deleteKeyCode={['Backspace', 'Delete']}
             fitView
           >
-            <Controls />
+            <Controls showInteractive={false} />
             <MiniMap />
             <Background variant="dots" gap={12} size={1} />
-          </ReactFlow>
+          </ReactFlowWrapper>
         </div>
+
         {selectedNode && interactionMode === 'properties' && (
           <PropertyPanel
             node={selectedNode}
@@ -401,6 +345,7 @@ const App = () => {
             apiKeys={apiKeys}
           />
         )}
+
         {selectedNode && interactionMode === 'interact' && (
           <InteractionPanel
             node={selectedNode}
@@ -409,6 +354,63 @@ const App = () => {
           />
         )}
       </div>
+
+      {showWorkspaceManager && (
+        <div className="modal-overlay">
+          <WorkspaceManager 
+            onSetWorkspace={onSetWorkspace}
+            recentWorkspaces={recentWorkspaces}
+            onSelectRecentWorkspace={onSetWorkspace}
+            onClose={() => setShowWorkspaceManager(false)}
+          />
+        </div>
+      )}
+
+      {showCredentialManager && (
+        <div className="modal-overlay">
+          <CredentialManager 
+            onClose={() => setShowCredentialManager(false)}
+          />
+        </div>
+      )}
+
+      {showAgentBuilder && (
+        <div className="modal-overlay">
+          <AgentBuilder
+            onSave={handleSaveAgent}
+            onClose={handleCloseAgentBuilder}
+            availableAgentTypes={availableAgentTypes}
+          />
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="error-message">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <strong className="font-bold">Error: </strong>
+            <span className="block sm:inline">{errorMessage}</span>
+            <button
+              className="absolute top-0 right-0 px-4 py-3"
+              onClick={() => setErrorMessage('')}
+            >
+              <span className="sr-only">Close</span>
+              <svg
+                className="h-6 w-6 text-red-500"
+                stroke="currentColor"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
