@@ -67,6 +67,10 @@ const App = () => {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
+  useEffect(() => {
+    console.log('AgentBuilder visibility changed:', showAgentBuilder);
+  }, [showAgentBuilder]);
+
   // Callback Functions
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
@@ -238,16 +242,36 @@ const App = () => {
   }, [setNodes]);
 
   const handleCreateAgent = useCallback(() => {
+    console.log('Opening AgentBuilder');
     setShowAgentBuilder(true);
   }, []);
-
-  const handleSaveAgent = useCallback((newAgent) => {
-    setAgents(prevAgents => [...prevAgents, { ...newAgent, id: Date.now().toString() }]);
+  
+  const handleSaveAgent = useCallback((agentConfig) => {
+    console.log('Saving agent:', agentConfig);
+    const newAgent = {
+      id: Date.now(),
+      ...agentConfig
+    };
+    setAgents(prev => [...prev, newAgent]);
     setShowAgentBuilder(false);
   }, []);
-
+  
   const handleCloseAgentBuilder = useCallback(() => {
+    console.log('Closing AgentBuilder');
     setShowAgentBuilder(false);
+  }, []);
+  
+  const handleUpdateAgent = useCallback((agentId, agentConfig) => {
+    console.log('Updating agent:', { agentId, agentConfig });
+    setAgents(prev => prev.map(agent => 
+      agent.id === agentId ? { ...agent, ...agentConfig } : agent
+    ));
+    setShowAgentBuilder(false);
+  }, []);
+  
+  const handleDeleteAgent = useCallback((agentId) => {
+    console.log('Deleting agent:', agentId);
+    setAgents(prev => prev.filter(agent => agent.id !== agentId));
   }, []);
 
   // API Key Management
@@ -375,13 +399,14 @@ const App = () => {
       )}
 
       {showAgentBuilder && (
-        <div className="modal-overlay">
-          <AgentBuilder
-            onSave={handleSaveAgent}
-            onClose={handleCloseAgentBuilder}
-            availableAgentTypes={availableAgentTypes}
-          />
-        </div>
+        <AgentBuilder
+          isOpen={showAgentBuilder}
+          onClose={handleCloseAgentBuilder}
+          onSave={handleSaveAgent}
+          onUpdate={handleUpdateAgent}
+          onDelete={handleDeleteAgent}
+          agents={agents}
+        />
       )}
 
       {errorMessage && (

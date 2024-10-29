@@ -12,7 +12,7 @@ REM The script does the following:
 REM 1. Runs the Python script 'aggregate_files.py' located in the Agentopia project directory
 REM 2. Sets the source directory to scan for files (the Agentopia project folder)
 REM 3. Sets the destination directory for aggregated files (the 'code_heap' folder)
-REM 4. Specifies file extensions to include (.js, .jsx, .css, .json, .md)
+REM 4. Specifies file extensions to include (.js, .jsx, .css, .md)
 REM
 REM After running, it displays a completion message and waits for user input before closing.
 REM
@@ -22,7 +22,7 @@ REM ============================================================================
 python C:\Users\scott\Documents\Agentopia\agentopia\aggregate_files.py ^
 C:\Users\scott\Documents\Agentopia\agentopia ^
 C:\Users\scott\Documents\Agentopia\agentopia\code_heap ^
---extensions .js .jsx .css .json .md
+--extensions .js .jsx .css .md
 
 echo File aggregation complete. Files are in C:\Users\scott\Documents\Agentopia\agentopia\code_heap
 pause
