@@ -24,6 +24,6 @@
     "react-modal": "^3.16.1",
     "reactflow": "^11.11.4",
     "tailwind-merge": "^2.5.3",
-    "zustand": "^5.0.0-rc.2"
+    "zustand": "^5.0.0"
   }
 }

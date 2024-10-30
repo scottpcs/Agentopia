@@ -1,9 +1,7 @@
+// src/App.jsx
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import ReactFlow, {
+import {
   addEdge,
-  Background,
-  Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
 } from 'reactflow';
@@ -28,90 +26,31 @@ import { executeWorkflow, stopWorkflowExecution } from './utils/workflowExecutio
 import './App.css';
 
 const App = () => {
-  // State Declarations
+  // Refs
   const reactFlowWrapper = useRef(null);
+
+  // State Declarations - Node Management
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [interactionMode, setInteractionMode] = useState(null);
+
+  // State Declarations - UI Management
   const [workspace, setWorkspace] = useState('');
   const [recentWorkspaces, setRecentWorkspaces] = useState([]);
   const [savedWorkflows, setSavedWorkflows] = useState([]);
   const [showWorkspaceManager, setShowWorkspaceManager] = useState(false);
   const [showCredentialManager, setShowCredentialManager] = useState(false);
   const [showAgentBuilder, setShowAgentBuilder] = useState(false);
-  const [selectedNode, setSelectedNode] = useState(null);
-  const [interactionMode, setInteractionMode] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // State Declarations - Data Management
   const [agents, setAgents] = useState([]);
   const [apiKeys, setApiKeys] = useState([]);
-  const [availableAgentTypes] = useState(['ai', 'human', 'expert']);
 
-  // Effect Hooks
-  useEffect(() => {
-    const storedWorkspaces = JSON.parse(localStorage.getItem('recentWorkspaces') || '[]');
-    setRecentWorkspaces(storedWorkspaces);
-    fetchWorkflows();
-    fetchAgents();
-    fetchApiKeys();
-  }, []);
-
-  useEffect(() => {
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setSelectedNode(null);
-        setInteractionMode(null);
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, []);
-
-  useEffect(() => {
-    console.log('AgentBuilder visibility changed:', showAgentBuilder);
-  }, [showAgentBuilder]);
-
-  // Callback Functions
-  const onConnect = useCallback(
-    (params) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
-  );
-
-  const onInit = useCallback((instance) => {
-    setReactFlowInstance(instance);
-  }, []);
-
-  const onDragOver = useCallback((event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const onDrop = useCallback(
-    (event) => {
-      event.preventDefault();
-
-      const type = event.dataTransfer.getData('application/reactflow');
-      if (typeof type === 'undefined' || !type) {
-        return;
-      }
-
-      const position = reactFlowInstance.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-
-      const newNode = {
-        id: `${type}-${Date.now()}`,
-        type,
-        position,
-        data: { label: `New ${type} node` },
-      };
-
-      setNodes((nds) => nds.concat(newNode));
-    },
-    [reactFlowInstance, setNodes]
-  );
-
+  // Node Change Handler - Define before use in other callbacks
   const onNodeChange = useCallback((nodeId, newData) => {
     setNodes((nds) =>
       nds.map((node) => {
@@ -130,6 +69,64 @@ const App = () => {
     );
   }, [setNodes]);
 
+  // Flow Event Handlers
+  const onConnect = useCallback(
+    (params) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  const onInit = useCallback((instance) => {
+    console.log('Flow initialized');
+    setReactFlowInstance(instance);
+  }, []);
+
+  const onDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (event) => {
+      event.preventDefault();
+
+      try {
+        const data = JSON.parse(event.dataTransfer.getData('application/reactflow'));
+        if (!data || !data.type) {
+          console.warn('Invalid drop data');
+          return;
+        }
+
+        if (!reactFlowInstance) {
+          console.warn('Flow instance not available');
+          return;
+        }
+
+        const position = reactFlowInstance.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+
+        const newNode = {
+          id: `${data.type}-${Date.now()}`,
+          type: data.type,
+          position,
+          data: {
+            ...data.data,
+            onChange: onNodeChange,
+          },
+        };
+
+        console.log('Creating new node:', newNode);
+        setNodes((nds) => nds.concat(newNode));
+      } catch (error) {
+        console.error('Error creating node:', error);
+        setErrorMessage('Failed to create node: ' + error.message);
+      }
+    },
+    [reactFlowInstance, setNodes, onNodeChange]
+  );
+
+  // Node Interaction Handlers
   const onNodeClick = useCallback((event, node) => {
     if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON') {
       return;
@@ -154,7 +151,7 @@ const App = () => {
     setInteractionMode(null);
   }, []);
 
-  // Workflow Management Functions
+  // Workflow Management
   const fetchWorkflows = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:3000/api/workflows');
@@ -194,25 +191,41 @@ const App = () => {
       const response = await fetch(`http://localhost:3000/api/workflows/${name}`);
       if (!response.ok) throw new Error('Failed to load workflow');
       const flow = await response.json();
-      setNodes(flow.nodes || []);
+      
+      // Ensure onChange is set for all nodes
+      const nodesWithOnChange = (flow.nodes || []).map(node => ({
+        ...node,
+        data: { ...node.data, onChange: onNodeChange }
+      }));
+      
+      setNodes(nodesWithOnChange);
       setEdges(flow.edges || []);
     } catch (error) {
       console.error('Error loading workflow:', error);
       setErrorMessage('Failed to load workflow');
     }
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, onNodeChange]);
 
-  // Workspace Management
-  const onSetWorkspace = useCallback((workspacePath) => {
-    setWorkspace(workspacePath);
-    setShowWorkspaceManager(false);
-    const updatedWorkspaces = [
-      workspacePath,
-      ...recentWorkspaces.filter(w => w !== workspacePath)
-    ].slice(0, 5);
-    setRecentWorkspaces(updatedWorkspaces);
-    localStorage.setItem('recentWorkspaces', JSON.stringify(updatedWorkspaces));
-  }, [recentWorkspaces]);
+  // Data Fetching Effects
+  useEffect(() => {
+    const storedWorkspaces = JSON.parse(localStorage.getItem('recentWorkspaces') || '[]');
+    setRecentWorkspaces(storedWorkspaces);
+    fetchWorkflows();
+    fetchAgents();
+    fetchApiKeys();
+  }, [fetchWorkflows]);
+
+  // Keyboard Event Effect
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setSelectedNode(null);
+        setInteractionMode(null);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, []);
 
   // Agent Management
   const fetchAgents = useCallback(async () => {
@@ -227,54 +240,6 @@ const App = () => {
     }
   }, []);
 
-  const onAddAgent = useCallback((agent) => {
-    if (agent) {
-      const newNode = {
-        id: `aiAgent-${Date.now()}`,
-        type: 'aiAgent',
-        position: { x: 100, y: 100 },
-        data: { ...agent, label: agent.name },
-      };
-      setNodes((nds) => nds.concat(newNode));
-    } else {
-      setShowAgentBuilder(true);
-    }
-  }, [setNodes]);
-
-  const handleCreateAgent = useCallback(() => {
-    console.log('Opening AgentBuilder');
-    setShowAgentBuilder(true);
-  }, []);
-  
-  const handleSaveAgent = useCallback((agentConfig) => {
-    console.log('Saving agent:', agentConfig);
-    const newAgent = {
-      id: Date.now(),
-      ...agentConfig
-    };
-    setAgents(prev => [...prev, newAgent]);
-    setShowAgentBuilder(false);
-  }, []);
-  
-  const handleCloseAgentBuilder = useCallback(() => {
-    console.log('Closing AgentBuilder');
-    setShowAgentBuilder(false);
-  }, []);
-  
-  const handleUpdateAgent = useCallback((agentId, agentConfig) => {
-    console.log('Updating agent:', { agentId, agentConfig });
-    setAgents(prev => prev.map(agent => 
-      agent.id === agentId ? { ...agent, ...agentConfig } : agent
-    ));
-    setShowAgentBuilder(false);
-  }, []);
-  
-  const handleDeleteAgent = useCallback((agentId) => {
-    console.log('Deleting agent:', agentId);
-    setAgents(prev => prev.filter(agent => agent.id !== agentId));
-  }, []);
-
-  // API Key Management
   const fetchApiKeys = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:3000/api/keys');
@@ -286,6 +251,58 @@ const App = () => {
       setErrorMessage('Failed to fetch API keys');
     }
   }, []);
+
+  // Agent Builder Handlers
+  const handleCreateAgent = useCallback(() => {
+    console.log('Opening AgentBuilder');
+    setShowAgentBuilder(true);
+  }, []);
+
+  const handleSaveAgent = useCallback(async (agentConfig) => {
+    console.log('Saving agent:', agentConfig);
+    const newAgent = {
+      id: Date.now(),
+      ...agentConfig
+    };
+    setAgents(prev => [...prev, newAgent]);
+    setShowAgentBuilder(false);
+  }, []);
+
+  const handleCloseAgentBuilder = useCallback(() => {
+    console.log('Closing AgentBuilder');
+    setShowAgentBuilder(false);
+  }, []);
+
+  const handleUpdateAgent = useCallback((agentId, agentConfig) => {
+    console.log('Updating agent:', { agentId, agentConfig });
+    setAgents(prev => prev.map(agent => 
+      agent.id === agentId ? { ...agent, ...agentConfig } : agent
+    ));
+    setShowAgentBuilder(false);
+  }, []);
+
+  const handleDeleteAgent = useCallback((agentId) => {
+    console.log('Deleting agent:', agentId);
+    setAgents(prev => prev.filter(agent => agent.id !== agentId));
+  }, []);
+
+  const onAddAgent = useCallback((agent) => {
+    if (agent) {
+      const newNode = {
+        id: `aiAgent-${Date.now()}`,
+        type: 'aiAgent',
+        position: { x: 100, y: 100 },
+        data: { 
+          ...agent, 
+          label: agent.name,
+          onChange: onNodeChange 
+        },
+      };
+      setNodes((nds) => nds.concat(newNode));
+    } else {
+      setShowAgentBuilder(true);
+    }
+  }, [setNodes, onNodeChange]);
 
   // Workflow Execution
   const onExecuteWorkflow = useCallback(async () => {
@@ -306,7 +323,18 @@ const App = () => {
     setIsExecuting(false);
   }, []);
 
-  // Render
+  // Workspace Management
+  const handleSetWorkspace = useCallback((path) => {
+    setWorkspace(path);
+    setShowWorkspaceManager(false);
+    const updatedWorkspaces = [
+      path,
+      ...recentWorkspaces.filter(w => w !== path)
+    ].slice(0, 5);
+    setRecentWorkspaces(updatedWorkspaces);
+    localStorage.setItem('recentWorkspaces', JSON.stringify(updatedWorkspaces));
+  }, [recentWorkspaces]);
+
   return (
     <div className="app-container">
       <MenuBar 
@@ -328,17 +356,7 @@ const App = () => {
           onCreateAgent={handleCreateAgent}
         />
         
-        <div 
-          className="flow-container" 
-          ref={reactFlowWrapper}
-          style={{ 
-            touchAction: 'none',
-            WebkitUserSelect: 'none',
-            MozUserSelect: 'none',
-            msUserSelect: 'none',
-            userSelect: 'none'
-          }}
-          >
+        <div className="flow-container" ref={reactFlowWrapper}>
           <ReactFlowWrapper
             nodes={nodes}
             edges={edges}
@@ -352,13 +370,7 @@ const App = () => {
             onNodeClick={onNodeClick}
             onNodeContextMenu={onNodeContextMenu}
             onPaneClick={onBackgroundClick}
-            deleteKeyCode={['Backspace', 'Delete']}
-            fitView
-          >
-            <Controls showInteractive={false} />
-            <MiniMap />
-            <Background variant="dots" gap={12} size={1} />
-          </ReactFlowWrapper>
+          />
         </div>
 
         {selectedNode && interactionMode === 'properties' && (
@@ -380,22 +392,17 @@ const App = () => {
       </div>
 
       {showWorkspaceManager && (
-        <div className="modal-overlay">
-          <WorkspaceManager 
-            onSetWorkspace={onSetWorkspace}
-            recentWorkspaces={recentWorkspaces}
-            onSelectRecentWorkspace={onSetWorkspace}
-            onClose={() => setShowWorkspaceManager(false)}
-          />
-        </div>
+        <WorkspaceManager 
+          onSetWorkspace={handleSetWorkspace}
+          recentWorkspaces={recentWorkspaces}
+          onClose={() => setShowWorkspaceManager(false)}
+        />
       )}
 
       {showCredentialManager && (
-        <div className="modal-overlay">
-          <CredentialManager 
-            onClose={() => setShowCredentialManager(false)}
-          />
-        </div>
+        <CredentialManager 
+          onClose={() => setShowCredentialManager(false)}
+        />
       )}
 
       {showAgentBuilder && (

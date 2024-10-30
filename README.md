@@ -8,103 +8,197 @@ Agentopia empowers users to visually design and execute complex AI workflows tha
 
 ## Features
 
-- Visual node-based interface for creating AI workflows
-- Support for AI agents, human agents, text input, text output, and human interaction nodes
-- Integration with OpenAI API for AI model interactions
-- Support for multiple OpenAI models including GPT-4, GPT-3.5-Turbo, and their variants
-- Customizable node properties (e.g., AI model selection, temperature, max tokens, system instructions, custom instructions)
-- Real-time workflow execution with visual feedback
-- Ability to stop and resume workflow execution
-- Dynamic updates to node properties during execution
-- Workspace management for organizing multiple workflows
-- Save, load, and download functionality for workflows
-- Secure API key management with encryption
-- Property panel for detailed node configuration
-- Interaction panel for real-time node testing and interaction
-- Support for multi-agent discussions with proper identification of participants
-- Context management and visualization
+### Visual Workflow Design
+- Node-based interface for creating AI workflows
+- Drag-and-drop functionality with automatic grid snapping
+- Real-time connection visualization
+- Support for multiple node types:
+  - AI agents with configurable personalities and expertise
+  - Human interaction nodes
+  - Text input/output nodes
+  - Process control nodes
+
+### Advanced Agent Configuration
+- Comprehensive personality configuration:
+  - Creativity level
+  - Communication tone
+  - Empathy settings
+  - Assertiveness control
+  - Humor preferences
+  - Optimism levels
+- Role-based configuration:
+  - Goal orientation
+  - Contribution style
+  - Task emphasis
+  - Domain scope
+- Expertise settings:
+  - Knowledge depth
+  - Specialized skills
+  - Certainty levels
+  - Responsibility scope
+
+### Model Integration
+- Support for multiple OpenAI models:
+  - GPT-4 and variants
+  - GPT-3.5-Turbo and variants
+- Intelligent model selection
+- Dynamic temperature adjustment
+- Cost estimation and tracking
+- Usage optimization
+
+### Workflow Management
+- Save and load workflows
+- Real-time execution monitoring
+- Error handling and recovery
+- State management
+- Context preservation between nodes
+
+### Security Features
+- Encrypted API key storage
+- Usage tracking and rate limiting
+- Secure credential management
+- Access control
 
 ## Prerequisites
 
 - Node.js (v14 or higher)
 - npm (v6 or higher)
 - PostgreSQL (v12 or higher)
+- OpenAI API key
 
 ## Setup
 
 1. Clone the repository:
+```bash
 git clone https://github.com/your-username/agentopia.git
 cd agentopia
-Copy
+```
+
 2. Install dependencies:
+```bash
 npm install
-Copy
+```
+
 3. Set up the database:
 - Create a PostgreSQL database named `agentopia`
 - Create a user for the application or use an existing one
 
 4. Configure environment variables:
-Create a `.env` file in the root directory with the following content:
+Create a `.env` file in the root directory:
+```env
 DATABASE_URL=postgresql://username:password@localhost:5432/agentopia
 ENCRYPTION_KEY=your_32_byte_encryption_key_here
-CopyReplace `username`, `password`, and the encryption key with your actual values.
+```
 
 5. Initialize the database:
+```bash
 node scripts/init-db.js
-Copy
+```
+
 6. Start the development server:
+```bash
 npm run dev
-Copy
-7. Open your browser and navigate to `http://localhost:5173` to access the application.
+```
+
+7. Open your browser and navigate to `http://localhost:5173`
 
 ## Usage
 
-1. Create a new workflow:
-- Use the toolbar on the left to add nodes to your workflow canvas.
-- Available node types: AI Agent, Human Agent, Text Input, Text Output, Human Interaction.
-- Connect nodes by dragging from one node's output handle to another node's input handle.
+### Creating a Workflow
 
-2. Configure nodes:
-- Left-click on a node to open the Interaction Panel.
-- Right-click on a node to open the Property Panel.
-- For AI agents, set the model, temperature, max tokens, API key, system instructions, and custom instructions.
-- For human agents and interaction nodes, set the name and any additional information.
+1. Add Nodes:
+   - Drag nodes from the sidebar onto the canvas
+   - Configure node properties via the Properties Panel
+   - Connect nodes by dragging from output to input handles
 
-3. Manage API keys:
-- Click on "Manage Credentials" in the menu bar to open the Credential Manager.
-- Add, edit, or delete API keys for OpenAI or other services.
+2. Configure Agents:
+   - Right-click AI Agent nodes to open Properties
+   - Configure personality, role, and expertise
+   - Set model preferences and parameters
+   - Preview generated system instructions
 
-4. Execute the workflow:
-- Click the "Execute Workflow" button in the menu bar.
-- Follow the execution progress and interact with Human Interaction nodes when prompted.
-- Use the "Stop Execution" button to halt the workflow at any time.
+3. Manage API Keys:
+   - Open Credential Manager from menu
+   - Add, edit, or remove API keys
+   - Set usage limits and expiration
 
-5. Save and load workflows:
-- Use the "Save Workflow" option in the File menu to save your current workflow.
-- Use the "Load Workflow" option to open a previously saved workflow.
+4. Execute Workflows:
+   - Click "Execute Workflow" in menu bar
+   - Monitor execution progress
+   - Interact with Human Interaction nodes
+   - View results in real-time
 
-6. Manage workspaces:
-- Click on "Set Workspace" to manage and switch between different workspaces.
+### Node Types
+
+1. AI Agent Node:
+   - Configurable personality and expertise
+   - Model selection
+   - Temperature control
+   - System instruction preview
+
+2. Human Interaction Node:
+   - Real-time input/output
+   - Context preservation
+   - State management
+
+3. Text Input/Output Nodes:
+   - Data entry and display
+   - Format control
+   - State persistence
 
 ## Development
 
-- The frontend is built with React and uses React Flow for the node-based interface.
-- The backend uses Express.js and interacts with a PostgreSQL database.
-- API calls to OpenAI are made through a secure backend proxy to protect API keys.
+The project uses:
+- React with Vite for frontend
+- Express.js for backend
+- React Flow for node-based interface
+- TailwindCSS for styling
+- shadcn/ui for components
 
-To contribute to the project:
+Key directories:
+```
+src/
+  ├── components/    # React components
+  ├── services/     # API services
+  ├── utils/        # Utility functions
+  ├── nodes/        # Node implementations
+  └── store/        # State management
+```
+
+## Contributing
 
 1. Fork the repository
-2. Create a new branch for your feature
-3. Make your changes and commit them
-4. Push to your fork and submit a pull request
+2. Create your feature branch
+3. Install dependencies and setup development environment
+4. Make your changes
+5. Run tests
+6. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Acknowledgments
 
-- OpenAI for providing the AI models used in this project
-- React Flow for the node-based interface library
-- All contributors who have helped shape and improve Agentopia
+- OpenAI for providing the AI models
+- React Flow for the node-based interface
+- All contributors to the project
+
+## Support
+
+For support or questions:
+- Open an issue in the repository
+- Check the documentation
+- Contact the development team
+
+## Future Development
+
+Planned features:
+- Advanced multi-agent interactions
+- Cost optimization tools
+- Performance improvements
+- Additional model support
+- Enhanced error handling
+- Workflow templates
+
+Last updated: October 28, 2024

@@ -119,12 +119,24 @@ app.post('/api/keys/:name/rotate', authMiddleware, async (req, res) => {
   }
 });
 
-// OpenAI API endpoint
+// Updated OpenAI API endpoint
 app.post('/api/openai', authMiddleware, async (req, res) => {
   try {
-    const { apiKeyName, model, messages, temperature, maxTokens, customInstructions } = req.body;
+    const { 
+      apiKeyName, 
+      model, 
+      messages, 
+      temperature, 
+      maxTokens, 
+      customInstructions 
+    } = req.body;
 
-    console.log('Received request:', { apiKeyName, model, messages, temperature, maxTokens, customInstructions });
+    console.log('Received OpenAI request:', { 
+      model, 
+      temperature, 
+      maxTokens,
+      messageCount: messages.length 
+    });
 
     if (!apiKeyName) {
       return res.status(400).json({ error: 'API key name is required' });
@@ -140,9 +152,9 @@ app.post('/api/openai', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'API key usage limit reached or key expired' });
     }
 
-    // Append custom instructions to the system message
+    // Prepare messages with custom instructions if provided
     const preparedMessages = messages.map((msg, index) => {
-      if (index === 0 && msg.role === 'system') {
+      if (index === 0 && msg.role === 'system' && customInstructions) {
         return {
           ...msg,
           content: `${msg.content}\n\n${customInstructions}`
@@ -151,13 +163,18 @@ app.post('/api/openai', authMiddleware, async (req, res) => {
       return msg;
     });
 
-    console.log('Prepared messages:', preparedMessages);
+    // Log the first few characters of the system message for debugging
+    if (preparedMessages[0]?.role === 'system') {
+      console.log('System message preview:', preparedMessages[0].content.substring(0, 200) + '...');
+    }
 
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model,
       messages: preparedMessages,
       temperature,
-      max_tokens: maxTokens
+      max_tokens: maxTokens,
+      presence_penalty: 0.1,
+      frequency_penalty: 0.1
     }, {
       headers: {
         'Authorization': `Bearer ${apiKey.value}`,
@@ -165,7 +182,11 @@ app.post('/api/openai', authMiddleware, async (req, res) => {
       }
     });
 
-    console.log('OpenAI API response:', response.data);
+    console.log('OpenAI API response received:', {
+      status: response.status,
+      hasChoices: !!response.data.choices,
+      messageLength: response.data.choices?.[0]?.message?.content?.length
+    });
 
     res.json(response.data);
   } catch (error) {
@@ -173,7 +194,11 @@ app.post('/api/openai', authMiddleware, async (req, res) => {
     if (error.response) {
       console.error('OpenAI API error response:', error.response.data);
     }
-    res.status(500).json({ error: 'Error calling OpenAI API', details: error.message });
+    res.status(500).json({ 
+      error: 'Error calling OpenAI API', 
+      details: error.message,
+      openaiError: error.response?.data?.error
+    });
   }
 });
 
@@ -222,7 +247,7 @@ app.get('/api/workflows/:name/download', authMiddleware, async (req, res) => {
   }
 });
 
-// New route for fetching agents
+// Agent Management
 app.get('/api/agents', authMiddleware, async (req, res) => {
   try {
     // For now, we'll return a static list of agents

@@ -1,3 +1,4 @@
+// src/components/nodeTypes.jsx
 import AIAgentNode from './AIAgentNode';
 import HumanInteractionNode from './HumanInteractionNode';
 import TextInputNode from './TextInputNode';
@@ -7,7 +8,7 @@ import ConversationNode from './ConversationNode';
 export const nodeTypes = {
   aiAgent: AIAgentNode,
   humanAgent: HumanInteractionNode,
-  humanInteraction: HumanInteractionNode,  // Added this mapping
+  humanInteraction: HumanInteractionNode,
   textInput: TextInputNode,
   textOutput: TextOutputNode,
   conversation: ConversationNode,

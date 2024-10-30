@@ -6,6 +6,8 @@ import { Select } from "./ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Cross2Icon } from '@radix-ui/react-icons';
 import { generateAgentConfiguration } from '../utils/agentConfigConverter';
+import { validateModelConfig, MODEL_CONFIGS, estimateCost } from '../utils/modelConfigUtils';
+import { estimateTokenUsage } from '../services/openaiService';
 
 const modelOptions = [
   { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
@@ -45,17 +47,35 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
     onChange(localNode.id, { [key]: value });
   };
 
-  const renderInstructions = () => {
-    if (!localNode.data) return null;
+// Update this section in PropertyPanel.jsx
 
-    const config = generateAgentConfiguration({
-      personality: localNode.data.personality || {},
-      role: localNode.data.role || {},
-      expertise: localNode.data.expertise || {}
-    });
+const renderInstructions = () => {
+  if (!localNode.data) return null;
 
-    return (
-      <div className="mt-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+  const config = generateAgentConfiguration({
+    personality: localNode.data.personality || {},
+    role: localNode.data.role || {},
+    expertise: localNode.data.expertise || {}
+  });
+
+  // Default to gpt-3.5-turbo if no model is selected
+  const currentModel = localNode.data.model || 'gpt-3.5-turbo';
+  
+  // Get validated configuration with safe defaults
+  const modelConfig = validateModelConfig(
+    currentModel,
+    config.modelSettings?.temperature,
+    localNode.data.maxTokens
+  );
+
+  const messages = [
+    { role: 'system', content: config.systemPrompt },
+    { role: 'user', content: 'Sample message for token estimation' }
+  ];
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
         <div className="flex justify-between items-center mb-2">
           <Label>System Instructions</Label>
           <Button
@@ -66,21 +86,53 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
             {showInstructions ? 'Hide' : 'Show'}
           </Button>
         </div>
+        
         {showInstructions && (
           <pre className="whitespace-pre-wrap text-sm font-mono text-gray-700 max-h-96 overflow-y-auto">
             {config.systemPrompt}
           </pre>
         )}
-        <div className="mt-2 text-sm text-gray-500">
-          Temperature: {config.modelSettings.temperature.toFixed(2)}
-          <br />
-          Presence Penalty: {config.modelSettings.presencePenalty.toFixed(2)}
-          <br />
-          Frequency Penalty: {config.modelSettings.frequencyPenalty.toFixed(2)}
+
+        <div className="mt-4 space-y-2 text-sm text-gray-600">
+          <div className="flex justify-between">
+            <span>Temperature:</span>
+            <span>{modelConfig.temperature.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Max Tokens:</span>
+            <span>{modelConfig.maxTokens}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Model:</span>
+            <span>{modelConfig.model}</span>
+          </div>
+          {config.modelSettings && (
+            <>
+              <div className="flex justify-between">
+                <span>Presence Penalty:</span>
+                <span>{config.modelSettings.presencePenalty.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Frequency Penalty:</span>
+                <span>{config.modelSettings.frequencyPenalty.toFixed(2)}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
-    );
-  };
+
+      {/* Only show cost estimation if we have a valid system prompt */}
+      {config.systemPrompt && (
+        <div className="text-sm text-gray-500">
+          Estimated cost per interaction: ${estimateCost(
+            modelConfig.model,
+            estimateTokenUsage(messages)
+          )?.toFixed(4) || '0.0000'}
+        </div>
+      )}
+    </div>
+  );
+};
 
   if (!localNode) return null;
 
@@ -199,19 +251,6 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
               value={localNode.data.text || ''}
               readOnly
               className="w-full p-2 border rounded mt-1 bg-gray-100"
-              rows={4}
-            />
-          </div>
-        )}
-
-        {localNode.type === 'humanInteraction' && (
-          <div>
-            <Label htmlFor="instructions">Instructions</Label>
-            <textarea
-              id="instructions"
-              value={localNode.data.instructions || ''}
-              onChange={(e) => handleChange('instructions', e.target.value)}
-              className="w-full p-2 border rounded mt-1"
               rows={4}
             />
           </div>

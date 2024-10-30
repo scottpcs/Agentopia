@@ -1,120 +1,607 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Handle, Position } from 'reactflow';
-import { Button } from './ui/button';
-import { eventSystem } from '../utils/eventSystem';
-import { agentRegistry } from '../utils/customAgentApi';
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import PropTypes from 'prop-types';
+import { 
+  Settings2, 
+  MessageCircle, 
+  Users, 
+  ChevronDown, 
+  ChevronUp,
+  Bot,
+  User,
+  Loader,
+  AlertCircle,
+  X,
+  Plus
+} from 'lucide-react';
 
-const ConversationNode = ({ data, isConnectable }) => {
+// Helper function to handle role display
+const getRoleDisplay = (role) => {
+  if (!role) return 'No role defined';
+  if (typeof role === 'string') return role;
+  if (typeof role === 'object') {
+    if (role.type === 'custom' && role.customRole) {
+      return role.customRole;
+    }
+    return role.type || 'Custom Role';
+  }
+  return 'Unknown Role';
+};
+
+const ConversationNode = ({ id, data, isConnectable }) => {
+  // State
   const [expanded, setExpanded] = useState(false);
-  const [messages, setMessages] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showParticipantMenu, setShowParticipantMenu] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
-  const [agents, setAgents] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [messages, setMessages] = useState([]);
+  
+  // Refs
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Memoized values
+  const participants = useMemo(() => data.agents || [], [data.agents]);
+  const conversationMode = useMemo(() => data.mode || 'free-form', [data.mode]);
+
+  // Auto-scroll to bottom when new messages arrive
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   useEffect(() => {
-    // Initialize agents when the component mounts or when data.agents changes
-    if (data.agents && Array.isArray(data.agents)) {
-      const initializedAgents = data.agents.map(agentData => 
-        agentRegistry.createAgent(agentData.role, agentData.id, agentData.name, agentData.role)
-      );
-      setAgents(initializedAgents);
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // Initialize or update conversation settings
+  useEffect(() => {
+    if (data.onChange) {
+      data.onChange(id, {
+        mode: conversationMode,
+        allowHumanParticipation: data.allowHumanParticipation !== false,
+        turnManagement: data.turnManagement || 'dynamic',
+        contextHandling: data.contextHandling || 'cumulative'
+      });
     }
+  }, [id, data.onChange, conversationMode]);
 
-    // Set up event listener for new messages
-    const handleNewMessage = (message) => {
-      setMessages(prevMessages => [...prevMessages, message]);
-    };
-    eventSystem.on('newMessage', handleNewMessage);
+  // Participant Management
+  const handleAddParticipant = useCallback((agent) => {
+    if (data.onChange && !participants.some(p => p.id === agent.id)) {
+      const newAgents = [...participants, agent];
+      data.onChange(id, { agents: newAgents });
+    }
+  }, [data, id, participants]);
 
-    return () => {
-      eventSystem.off('newMessage', handleNewMessage);
-    };
-  }, [data.agents]);
+  const handleRemoveParticipant = useCallback((agentId) => {
+    if (data.onChange) {
+      const newAgents = participants.filter(p => p.id !== agentId);
+      data.onChange(id, { agents: newAgents });
+    }
+  }, [data, id, participants]);
 
-  const processConversation = useCallback(async (message) => {
-    setIsProcessing(true);
-    for (const agent of agents) {
+  const handleQuickAdd = useCallback(async (type) => {
+    if (data.onChange && data.onCreateAgent) {
       try {
-        const response = await agent.processMessage(message);
-        const newMessage = {
-          id: Date.now(),
-          content: response,
-          sender: agent.name,
-        };
-        eventSystem.emit('newMessage', newMessage);
+        const newAgent = await data.onCreateAgent(type);
+        if (newAgent) {
+          handleAddParticipant(newAgent);
+        }
       } catch (error) {
-        console.error(`Error processing message for agent ${agent.name}:`, error);
-        eventSystem.emit('newMessage', {
-          id: Date.now(),
-          content: `Error: ${error.message}`,
-          sender: 'System',
-        });
+        console.error('Error creating agent:', error);
+        if (data.onChange) {
+          data.onChange(id, { error: `Failed to create agent: ${error.message}` });
+        }
       }
     }
-    setIsProcessing(false);
-  }, [agents]);
+  }, [data, id, handleAddParticipant]);
 
-  const handleSendMessage = useCallback(() => {
-    if (inputMessage.trim() && !isProcessing) {
-      const newMessage = {
-        id: Date.now(),
-        content: inputMessage,
-        sender: 'User',
-      };
-      eventSystem.emit('newMessage', newMessage);
-      setInputMessage('');
-      processConversation(inputMessage);
+  // Drag and Drop handlers
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDraggingOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setIsDraggingOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    try {
+      const agentData = JSON.parse(e.dataTransfer.getData('application/reactflow'));
+      if (agentData.type === 'aiAgent' || agentData.type === 'humanAgent') {
+        handleAddParticipant({
+          id: `${agentData.type}-${Date.now()}`,
+          ...agentData.data
+        });
+      }
+    } catch (error) {
+      console.error('Error handling drop:', error);
     }
-  }, [inputMessage, isProcessing, processConversation]);
+  }, [handleAddParticipant]);
+
+  // Message handling
+  const handleSendMessage = useCallback(async () => {
+    if (!inputMessage.trim() || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      // Add user message
+      const userMessage = {
+        id: Date.now(),
+        content: inputMessage.trim(),
+        sender: 'User',
+        role: 'user',
+        timestamp: new Date().toISOString()
+      };
+      
+      setMessages(prev => [...prev, userMessage]);
+      setInputMessage('');
+
+      // Process with active agents based on conversation mode
+      switch (conversationMode) {
+        case 'round-robin':
+          for (const agent of participants) {
+            await processAgentResponse(agent, [...messages, userMessage]);
+          }
+          break;
+
+        case 'moderated':
+          if (participants.length > 0) {
+            const moderator = participants[0];
+            const decision = await processModeratorDecision(moderator, [...messages, userMessage]);
+            for (const agentId of decision) {
+              const agent = participants.find(a => a.id === agentId);
+              if (agent) {
+                await processAgentResponse(agent, [...messages, userMessage]);
+              }
+            }
+          }
+          break;
+
+        case 'free-form':
+        default:
+          await Promise.all(participants.map(agent => 
+            processAgentResponse(agent, [...messages, userMessage])
+          ));
+          break;
+      }
+
+    } catch (error) {
+      console.error('Error in conversation:', error);
+      if (data.onChange) {
+        data.onChange(id, { error: error.message });
+      }
+    } finally {
+      setIsProcessing(false);
+      inputRef.current?.focus();
+    }
+  }, [inputMessage, isProcessing, messages, participants, conversationMode, data, id]);
+
+  const processAgentResponse = async (agent, messageHistory) => {
+    try {
+      const response = await fetch('http://localhost:3000/api/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKeyId: agent.apiKeyId,
+          model: agent.model || 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: generateAgentInstructions(agent)
+            },
+            ...messageHistory.map(m => ({
+              role: m.role,
+              content: m.content
+            }))
+          ],
+          temperature: agent.temperature || 0.7,
+          maxTokens: agent.maxTokens || 150
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to get agent response');
+      
+      const data = await response.json();
+      const content = data.choices[0].message.content;
+
+      const agentMessage = {
+        id: Date.now(),
+        content,
+        sender: agent.name,
+        role: 'assistant',
+        timestamp: new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, agentMessage]);
+      return content;
+
+    } catch (error) {
+      console.error(`Error processing agent ${agent.name}:`, error);
+      throw error;
+    }
+  };
+
+  const generateAgentInstructions = (agent) => {
+    const baseInstructions = agent.instructions || 'You are a helpful assistant.';
+    const roleContext = `You are acting as ${getRoleDisplay(agent.role)}.`;
+    const conversationContext = `You are participating in a ${conversationMode} conversation with multiple agents.`;
+    
+    return `${baseInstructions}\n\n${roleContext}\n\n${conversationContext}`;
+  };
+
+  const handleKeyPress = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  }, [handleSendMessage]);
+
+  // Message rendering
+  const renderMessage = useCallback((message) => {
+    const getMessageStyle = () => {
+      switch (message.role) {
+        case 'user':
+          return 'bg-blue-50 border-blue-200';
+        case 'assistant':
+          return 'bg-green-50 border-green-200';
+        case 'system':
+          return 'bg-gray-50 border-gray-200';
+        default:
+          return 'bg-white border-gray-200';
+      }
+    };
+
+    return (
+      <div
+        key={message.id}
+        className={`p-3 rounded-lg border mb-2 ${getMessageStyle()}`}
+      >
+        <div className="flex justify-between items-center mb-1">
+          <div className="flex items-center gap-2">
+            {message.role === 'assistant' ? (
+              <Bot className="w-4 h-4 text-green-500" />
+            ) : message.role === 'user' ? (
+              <User className="w-4 h-4 text-blue-500" />
+            ) : (
+              <MessageCircle className="w-4 h-4 text-gray-500" />
+            )}
+            <span className="text-sm font-medium">{message.sender}</span>
+          </div>
+          <span className="text-xs text-gray-500">
+            {new Date(message.timestamp).toLocaleTimeString()}
+          </span>
+        </div>
+        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+      </div>
+    );
+  }, []);
 
   return (
-    <div className="conversation-node bg-white border border-gray-300 rounded-lg p-4 shadow-md relative">
+    <div className="conversation-node bg-white border border-gray-200 rounded-lg shadow-lg w-96">
       <Handle
         type="target"
         position={Position.Top}
-        style={{ background: '#555', width: '12px', height: '12px', top: '-6px' }}
+        style={{ background: '#555' }}
         isConnectable={isConnectable}
       />
-      <div className="summary-view cursor-pointer" onClick={() => setExpanded(!expanded)}>
-        <h3 className="text-lg font-bold mb-2">{data.label || 'Conversation'}</h3>
-        <ul className="list-disc pl-5">
-          {agents.map(agent => (
-            <li key={agent.id} className="text-sm">{agent.name} - {agent.role}</li>
-          ))}
-        </ul>
-      </div>
-      {expanded && (
-        <div className="expanded-view mt-4 border-t pt-4">
-          <div className="conversation-messages max-h-60 overflow-y-auto mb-4">
-            {messages.map(message => (
-              <div key={message.id} className="mb-2">
-                <strong>{message.sender}:</strong> {message.content}
-              </div>
-            ))}
+
+      <div className="p-4">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-gray-500" />
+            <h3 className="text-lg font-semibold">
+              {data.label || 'Multi-Agent Conversation'}
+            </h3>
           </div>
-          <div className="flex">
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              className="flex-grow mr-2 p-2 border rounded"
-              placeholder="Type a message..."
-              disabled={isProcessing}
-            />
-            <Button onClick={handleSendMessage} disabled={isProcessing}>
-              {isProcessing ? 'Processing...' : 'Send'}
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <Settings2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>
-      )}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={{ background: '#555', width: '12px', height: '12px', bottom: '-6px' }}
-        isConnectable={isConnectable}
-      />
-    </div>
-  );
+
+        {/* Settings Panel */}
+        {showSettings && (
+          <Card className="mb-4">
+            <CardContent className="p-4 space-y-4">
+              <div>
+                <Label>Conversation Mode</Label>
+                <select
+                  value={data.mode || 'free-form'}
+                  onChange={(e) => data.onChange?.(id, { mode: e.target.value })}
+                  className="w-full mt-1 border rounded p-2 text-sm"
+                >
+                  <option value="free-form">Free-form</option>
+                  <option value="round-robin">Round-robin</option>
+                  <option value="moderated">Moderated</option>
+                </select>
+              </div>
+              
+              <div>
+                <Label>Context Handling</Label>
+                <select
+                  value={data.contextHandling || 'cumulative'}
+                  onChange={(e) => data.onChange?.(id, { contextHandling: e.target.value })}
+                  className="w-full mt-1 border rounded p-2 text-sm"
+                >
+                  <option value="cumulative">Cumulative</option>
+                  <option value="reset">Reset Each Time</option>
+                  <option value="window">Sliding Window</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="allowHuman"
+                  checked={data.allowHumanParticipation !== false}
+                  onChange={(e) => data.onChange?.(id, { allowHumanParticipation: e.target.checked })}
+                />
+                <Label htmlFor="allowHuman">Allow Human Participation</Label>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Participants */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <Label className="font-medium">Participants</Label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowParticipantMenu(!showParticipantMenu)}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Participant
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {participants.map((agent) => (
+              <div
+                key={agent.id}
+                className="flex items-center justify-between bg-gray-50 p-2 rounded-md"
+              >
+                <div className="flex items-center gap-2">
+                  {agent.type === 'ai' ? (
+                    <Bot className="w-4 h-4 text-blue-500" />
+                  ) : (
+                    <User className="w-4 h-4 text-green-500" />
+                  )}
+                  <span className="text-sm font-medium">{agent.name}</span>
+                  <span className="text-xs text-gray-500">
+                    ({getRoleDisplay(agent.role)})
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleRemoveParticipant(agent.id)}
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {showParticipantMenu && (
+            <Card className="mt-2">
+              <CardContent className="p-4">
+                <Label className="mb-2 block">Add Participants</Label>
+                
+                <div className="flex gap-2 mb-4">
+                  <Button
+variant="outline"
+size="sm"
+onClick={() => handleQuickAdd('ai')}
+>
+<Bot className="w-4 h-4 mr-1" />
+New AI Agent
+</Button>
+<Button
+variant="outline"
+size="sm"
+onClick={() => handleQuickAdd('human')}
+>
+<User className="w-4 h-4 mr-1" />
+New Human
+</Button>
+</div>
+
+<div 
+className={`border-2 border-dashed rounded-md p-4 text-center
+${isDraggingOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}
+`}
+onDragOver={handleDragOver}
+onDragLeave={handleDragLeave}
+onDrop={handleDrop}
+>
+<p className="text-sm text-gray-500">
+Drag agents here to add them to the conversation
+</p>
+</div>
+</CardContent>
+</Card>
+)}
+</div>
+
+{/* Expanded Content */}
+{expanded && (
+<>
+{/* Messages */}
+<div className="border rounded-lg mb-4">
+<div className="max-h-60 overflow-y-auto p-3">
+{messages.map(renderMessage)}
+<div ref={messagesEndRef} />
+</div>
+</div>
+
+{/* Input Area */}
+<div className="flex gap-2">
+<Input
+ref={inputRef}
+value={inputMessage}
+onChange={(e) => setInputMessage(e.target.value)}
+onKeyPress={handleKeyPress}
+placeholder="Type your message..."
+disabled={isProcessing}
+className="flex-grow"
+/>
+<Button
+onClick={handleSendMessage}
+disabled={isProcessing || !inputMessage.trim()}
+>
+{isProcessing ? (
+<Loader className="w-4 h-4 animate-spin" />
+) : (
+'Send'
+)}
+</Button>
+</div>
+
+{/* Error Display */}
+{data.error && (
+<div className="mt-2 text-sm text-red-500 flex items-center gap-1">
+<AlertCircle className="w-4 h-4" />
+<span>{data.error}</span>
+</div>
+)}
+</>
+)}
+</div>
+
+<Handle
+type="source"
+position={Position.Bottom}
+style={{ background: '#555' }}
+isConnectable={isConnectable}
+/>
+</div>
+);
+};
+
+const processModeratorDecision = async (moderator, messageHistory) => {
+try {
+const response = await fetch('http://localhost:3000/api/openai', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+apiKeyId: moderator.apiKeyId,
+model: moderator.model || 'gpt-3.5-turbo',
+messages: [
+{
+role: 'system',
+content: `You are a conversation moderator. Review the context and decide which agents should respond.
+ Available agents: ${moderator.availableAgents?.map(a => `${a.id} (${a.role})`).join(', ')}.
+ Respond with a JSON array of agent IDs that should participate.`
+},
+...messageHistory.map(m => ({
+role: m.role,
+content: m.content
+}))
+],
+temperature: 0.3,
+maxTokens: 100
+}),
+});
+
+if (!response.ok) throw new Error('Failed to get moderator decision');
+
+const data = await response.json();
+try {
+return JSON.parse(data.choices[0].message.content);
+} catch {
+return [];
+}
+} catch (error) {
+console.error('Error in moderator decision:', error);
+return [];
+}
+};
+
+ConversationNode.propTypes = {
+id: PropTypes.string.isRequired,
+data: PropTypes.shape({
+label: PropTypes.string,
+conversationId: PropTypes.string,
+mode: PropTypes.oneOf(['free-form', 'round-robin', 'moderated']),
+agents: PropTypes.arrayOf(
+PropTypes.shape({
+id: PropTypes.string.isRequired,
+name: PropTypes.string.isRequired,
+type: PropTypes.oneOf(['ai', 'human']).isRequired,
+role: PropTypes.oneOfType([
+PropTypes.string,
+PropTypes.shape({
+type: PropTypes.string,
+customRole: PropTypes.string,
+goalOrientation: PropTypes.number,
+contributionStyle: PropTypes.number,
+taskEmphasis: PropTypes.number,
+domainScope: PropTypes.number
+})
+]),
+apiKeyId: PropTypes.string,
+model: PropTypes.string,
+temperature: PropTypes.number,
+maxTokens: PropTypes.number,
+instructions: PropTypes.string,
+})
+),
+contextInput: PropTypes.oneOfType([
+PropTypes.string,
+PropTypes.arrayOf(PropTypes.string)
+]),
+contextHandling: PropTypes.oneOf(['cumulative', 'reset', 'window']),
+allowHumanParticipation: PropTypes.bool,
+turnManagement: PropTypes.oneOf(['dynamic', 'strict']),
+onChange: PropTypes.func,
+onContextOutput: PropTypes.func,
+onCreateAgent: PropTypes.func,
+error: PropTypes.string,
+}).isRequired,
+isConnectable: PropTypes.bool,
+selected: PropTypes.bool,
+};
+
+ConversationNode.defaultProps = {
+isConnectable: true,
+selected: false,
+data: {
+mode: 'free-form',
+contextHandling: 'cumulative',
+allowHumanParticipation: true,
+turnManagement: 'dynamic',
+agents: [],
+},
 };
 
 export default ConversationNode;

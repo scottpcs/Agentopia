@@ -31,7 +31,7 @@ const REACT_FLOW_PROPS = [
   'maxZoom',
   'fitView',
   'proOptions',
-  'deleteKeyCode', // Added deleteKeyCode to React Flow props
+  'deleteKeyCode',
 ];
 
 const ReactFlowWrapper = (props) => {
@@ -116,7 +116,8 @@ const ReactFlowWrapper = (props) => {
     snapToGrid: true,
     snapGrid: [15, 15],
     minZoom: 0.2,
-    maxZoom: 4
+    maxZoom: 4,
+    fitView: true
   };
 
   return (
@@ -127,7 +128,9 @@ const ReactFlowWrapper = (props) => {
         style={{ 
           touchAction: 'none',
           WebkitUserSelect: 'none',
-          userSelect: 'none'
+          userSelect: 'none',
+          width: '100%',
+          height: '100%'
         }}
         {...divProps}
       >
@@ -135,6 +138,12 @@ const ReactFlowWrapper = (props) => {
           {...defaultReactFlowProps}
           {...reactFlowProps}
         >
+          <Background
+            variant="dots"
+            gap={12}
+            size={1}
+            color="#e2e8f0"
+          />
           {props.children}
         </ReactFlow>
       </div>

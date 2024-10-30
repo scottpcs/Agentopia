@@ -1,4 +1,5 @@
 import { callOpenAI } from '../services/openaiService';
+import { generateAgentConfiguration } from '../utils/agentConfigConverter';
 
 let isExecutionStopped = false;
 
@@ -26,13 +27,35 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
   // Find the best start node based on node type and connections
   const findStartNode = () => {
     // First, try to find nodes with no incoming edges
-    const nodesWithoutIncoming = nodes.filter(node => !incomingEdges[node.id] || incomingEdges[node.id].length === 0);
+    const nodesWithoutIncoming = nodes.filter(node => 
+      !incomingEdges[node.id] || incomingEdges[node.id].length === 0
+    );
+    
     if (nodesWithoutIncoming.length > 0) {
-      console.log('Found nodes without incoming edges:', nodesWithoutIncoming);
+      // Prioritize nodes in this order: textInput, humanInteraction, aiAgent
+      const priorityOrder = ['textInput', 'humanInteraction', 'aiAgent'];
+      
+      for (const nodeType of priorityOrder) {
+        const priorityNode = nodesWithoutIncoming.find(node => node.type === nodeType);
+        if (priorityNode) {
+          console.log(`Using ${nodeType} node as start:`, priorityNode);
+          return priorityNode;
+        }
+      }
+      
+      // If no priority nodes found, use the first node without incoming edges
+      console.log('Using first node without incoming edges:', nodesWithoutIncoming[0]);
       return nodesWithoutIncoming[0];
     }
 
-    // If no nodes without incoming edges, prefer humanInteraction nodes
+    // If all nodes have incoming edges, prefer textInput nodes
+    const textInputNodes = nodes.filter(node => node.type === 'textInput');
+    if (textInputNodes.length > 0) {
+      console.log('Using text input node as start:', textInputNodes[0]);
+      return textInputNodes[0];
+    }
+
+    // Then try humanInteraction nodes
     const humanNodes = nodes.filter(node => node.type === 'humanInteraction');
     if (humanNodes.length > 0) {
       console.log('Using human interaction node as start:', humanNodes[0]);
@@ -68,16 +91,44 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
 
     try {
       switch (node.type) {
-        case 'aiAgent':
+        case 'aiAgent': {
           console.log('Processing AI Agent node:', node);
-          const { apiKeyId, model, temperature, maxTokens, systemInstructions } = node.data;
+          const { apiKeyId, model } = node.data;
+          
+          // Generate the complete agent configuration including system prompt
+          const agentConfig = generateAgentConfiguration({
+            personality: node.data.personality || {},
+            role: node.data.role || {},
+            expertise: node.data.expertise || {}
+          });
+
+          console.log('Generated agent configuration:', {
+            systemPrompt: agentConfig.systemPrompt,
+            modelSettings: agentConfig.modelSettings
+          });
+
           const messages = [
-            { role: 'system', content: systemInstructions || 'You are a helpful assistant.' },
-            { role: 'user', content: input }
+            { 
+              role: 'system', 
+              content: agentConfig.systemPrompt 
+            },
+            { 
+              role: 'user', 
+              content: input 
+            }
           ];
-          output = await callOpenAI(apiKeyId, model, messages, temperature, maxTokens);
+
+          output = await callOpenAI(
+            apiKeyId, 
+            model, 
+            messages, 
+            agentConfig.modelSettings.temperature,
+            1000 // Default max tokens, could be made configurable
+          );
+          
           onNodeChange(nodeId, { lastOutput: output });
           break;
+        }
 
         case 'humanInteraction':
           console.log('Processing Human Interaction node:', node);
@@ -101,6 +152,24 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
                 resolve(humanInput);
               }
             });
+          });
+          break;
+
+        case 'textInput':
+          console.log('Processing Text Input node:', node);
+          output = node.data.inputText || input;
+          onNodeChange(nodeId, { 
+            lastInput: input,
+            lastOutput: output
+          });
+          break;
+
+        case 'textOutput':
+          console.log('Processing Text Output node:', node);
+          output = input;
+          onNodeChange(nodeId, { 
+            text: input,
+            lastOutput: input
           });
           break;
 
