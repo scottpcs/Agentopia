@@ -21,6 +21,7 @@
     "lucide-react": "^0.454.0",
     "pg": "^8.13.0",
     "prop-types": "^15.8.1",
+    "react-beautiful-dnd": "^13.1.1",
     "react-modal": "^3.16.1",
     "reactflow": "^11.11.4",
     "tailwind-merge": "^2.5.3",

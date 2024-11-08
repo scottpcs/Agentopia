@@ -13,3 +13,5 @@ export const nodeTypes = {
   textOutput: TextOutputNode,
   conversation: ConversationNode,
 };
+
+export default nodeTypes;

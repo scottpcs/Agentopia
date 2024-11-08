@@ -92,19 +92,20 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
     try {
       switch (node.type) {
         case 'aiAgent': {
-          console.log('Processing AI Agent node:', node);
-          const { apiKeyId, model } = node.data;
-          
-          // Generate the complete agent configuration including system prompt
+          console.log('Processing AI Agent node:', {
+            nodeId,
+            model: node.data.modelConfig?.model,
+            apiKeyId: node.data.apiKeyId
+          });
+
+          if (!node.data.apiKeyId) {
+            throw new Error(`No API key configured for AI Agent: ${node.data.name || nodeId}`);
+          }
+
           const agentConfig = generateAgentConfiguration({
             personality: node.data.personality || {},
             role: node.data.role || {},
             expertise: node.data.expertise || {}
-          });
-
-          console.log('Generated agent configuration:', {
-            systemPrompt: agentConfig.systemPrompt,
-            modelSettings: agentConfig.modelSettings
           });
 
           const messages = [
@@ -119,14 +120,19 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
           ];
 
           output = await callOpenAI(
-            apiKeyId, 
-            model, 
-            messages, 
-            agentConfig.modelSettings.temperature,
-            1000 // Default max tokens, could be made configurable
+            node.data.apiKeyId,
+            node.data.modelConfig?.model || 'gpt-4o',
+            messages,
+            node.data.modelConfig?.parameters?.temperature || agentConfig.modelSettings.temperature,
+            node.data.modelConfig?.parameters?.maxTokens || agentConfig.modelSettings.maxTokens,
+            node.data.instructions
           );
           
-          onNodeChange(nodeId, { lastOutput: output });
+          onNodeChange(nodeId, { 
+            lastOutput: output,
+            lastInput: input,
+            context: messages.concat([{ role: 'assistant', content: output }])
+          });
           break;
         }
 
@@ -173,6 +179,83 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
           });
           break;
 
+        case 'conversation': {
+          console.log('Processing Conversation node:', {
+            nodeId,
+            mode: node.data.mode,
+            agents: node.data.agents?.length,
+            apiKeyId: node.data.apiKeyId
+          });
+
+          if (!node.data.agents || node.data.agents.length === 0) {
+            throw new Error('No agents configured for conversation node');
+          }
+
+          // Validate API keys for all agents
+          const missingApiKeys = node.data.agents.filter(agent => !agent.apiKeyId);
+          if (missingApiKeys.length > 0) {
+            throw new Error(`Missing API keys for agents: ${missingApiKeys.map(a => a.name || a.id).join(', ')}`);
+          }
+
+          const conversationOutput = [];
+          
+          switch (node.data.mode) {
+            case 'round-robin':
+              for (const agent of node.data.agents) {
+                const agentResponse = await processAgent(agent, input, conversationOutput);
+                conversationOutput.push(agentResponse);
+              }
+              break;
+
+            case 'moderated':
+              if (node.data.agents.length > 0) {
+                const moderator = node.data.agents[0];
+                if (!moderator.apiKeyId) {
+                  throw new Error('Moderator agent requires an API key');
+                }
+                const participants = await getParticipantsFromModerator(
+                  moderator, 
+                  input,
+                  node.data.agents
+                );
+                for (const participantId of participants) {
+                  const agent = node.data.agents.find(a => a.id === participantId);
+                  if (agent) {
+                    const agentResponse = await processAgent(agent, input, conversationOutput);
+                    conversationOutput.push(agentResponse);
+                  }
+                }
+              }
+              break;
+
+            case 'free-form':
+            default:
+              await Promise.all(node.data.agents.map(async agent => {
+                if (!agent.apiKeyId) {
+                  throw new Error(`Agent ${agent.name || agent.id} requires an API key`);
+                }
+                const agentResponse = await processAgent(agent, input, conversationOutput);
+                conversationOutput.push(agentResponse);
+              }));
+              break;
+          }
+
+          output = conversationOutput.join('\n\n');
+          onNodeChange(nodeId, {
+            lastOutput: output,
+            lastInput: input,
+            messages: [
+              ...node.data.messages || [],
+              { role: 'user', content: input },
+              ...conversationOutput.map(response => ({
+                role: 'assistant',
+                content: response
+              }))
+            ]
+          });
+          break;
+        }
+
         default:
           console.warn(`Using default handling for node type: ${node.type}`);
           output = input;
@@ -191,8 +274,86 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
       return output;
     } catch (error) {
       console.error(`Error processing node ${nodeId}:`, error);
-      onNodeChange(nodeId, { error: error.message });
+      onNodeChange(nodeId, { 
+        error: error.message,
+        status: 'error'
+      });
       throw error;
+    }
+  };
+
+  const processAgent = async (agent, input, conversationHistory) => {
+    console.log('Processing agent:', {
+      agentId: agent.id,
+      name: agent.name,
+      apiKeyId: agent.apiKeyId,
+      model: agent.modelConfig?.model
+    });
+
+    if (!agent.apiKeyId) {
+      throw new Error(`No API key configured for agent: ${agent.name}`);
+    }
+
+    const agentConfig = generateAgentConfiguration({
+      personality: agent.personality || {},
+      role: agent.role || {},
+      expertise: agent.expertise || {}
+    });
+
+    const messages = [
+      {
+        role: 'system',
+        content: agentConfig.systemPrompt
+      },
+      ...conversationHistory.map(msg => ({
+        role: 'assistant',
+        content: msg
+      })),
+      {
+        role: 'user',
+        content: input
+      }
+    ];
+
+    return await callOpenAI(
+      agent.apiKeyId,
+      agent.modelConfig?.model || 'gpt-4o',
+      messages,
+      agent.modelConfig?.parameters?.temperature || agentConfig.modelSettings.temperature,
+      agent.modelConfig?.parameters?.maxTokens || agentConfig.modelSettings.maxTokens,
+      agent.instructions
+    );
+  };
+
+  const getParticipantsFromModerator = async (moderator, input, availableAgents) => {
+    const moderatorConfig = generateAgentConfiguration({
+      personality: moderator.personality || {},
+      role: moderator.role || {},
+      expertise: moderator.expertise || {}
+    });
+
+    const response = await callOpenAI(
+      moderator.apiKeyId,
+      moderator.modelConfig?.model || 'gpt-4o',
+      [
+        {
+          role: 'system',
+          content: `${moderatorConfig.systemPrompt}\n\nYou are the moderator of this conversation. Review the context and decide which agents should respond. Available agents: ${availableAgents.map(a => `${a.id} (${a.role?.type || 'Unknown Role'})`).join(', ')}\n\nRespond with a JSON array of agent IDs that should participate.`
+        },
+        {
+          role: 'user',
+          content: input
+        }
+      ],
+      0.3, // Lower temperature for more consistent moderation
+      100  // Short response needed
+    );
+
+    try {
+      return JSON.parse(response);
+    } catch (error) {
+      console.warn('Failed to parse moderator response:', response);
+      return [];
     }
   };
 

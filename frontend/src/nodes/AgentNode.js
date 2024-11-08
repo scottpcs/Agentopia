@@ -1,20 +1,29 @@
-// src/nodes/AgentNode.js
 import BaseNode from './BaseNode';
 import { callOpenAI } from '../services/openaiService';
+import { generateAgentConfiguration } from '../utils/agentConfigConverter';
 
 class AgentNode extends BaseNode {
   constructor(id, data) {
     super(id, 'agent', {
-      name: data.name,
-      type: data.type,
+      name: data.name || 'AI Agent',
+      type: data.type || 'ai',
       role: data.role,
-      model: data.model,
+      personality: data.personality,
+      expertise: data.expertise,
+      modelConfig: data.modelConfig || {
+        model: 'gpt-4o',
+        provider: 'openai',
+        parameters: {
+          temperature: 0.7,
+          maxTokens: 2048
+        }
+      },
       apiKeyId: data.apiKeyId,
-      temperature: data.temperature,
-      maxTokens: data.maxTokens,
       instructions: data.instructions,
       context: [],
       structuredOutput: {},
+      onChange: data.onChange,
+      onCreateAgent: data.onCreateAgent,
       ...data
     });
     this.addInput('input');
@@ -30,25 +39,50 @@ class AgentNode extends BaseNode {
   }
 
   async processAI(inputData) {
+    console.log('Processing AI node input:', {
+      nodeId: this.id,
+      model: this.data.modelConfig?.model,
+      apiKey: this.data.apiKeyId,
+      inputType: typeof inputData
+    });
+
     // Parse the input data to extract any structured information
     const { text, structuredData } = this.parseInput(inputData);
 
     // Update the context with the new input
     this.data.context.push({ role: 'user', content: text });
 
-    // Prepare the messages for the API call
-    const messages = [
-      { role: 'system', content: this.generateSystemMessage() },
-      ...this.data.context
-    ];
-
     try {
+      // Generate the complete agent configuration including system prompt
+      const agentConfig = generateAgentConfiguration({
+        personality: this.data.personality || {},
+        role: this.data.role || {},
+        expertise: this.data.expertise || {}
+      });
+
+      // Prepare the messages for the API call
+      const messages = [
+        { 
+          role: 'system', 
+          content: agentConfig.systemPrompt 
+        },
+        ...this.data.context
+      ];
+
+      console.log('Calling OpenAI with configuration:', {
+        model: this.data.modelConfig?.model,
+        temperature: this.data.modelConfig?.parameters?.temperature,
+        maxTokens: this.data.modelConfig?.parameters?.maxTokens,
+        messageCount: messages.length
+      });
+
       const response = await callOpenAI(
         this.data.apiKeyId,
-        this.data.model,
+        this.data.modelConfig?.model || 'gpt-4o',
         messages,
-        this.data.temperature,
-        this.data.maxTokens
+        this.data.modelConfig?.parameters?.temperature || 0.7,
+        this.data.modelConfig?.parameters?.maxTokens || 2048,
+        this.data.instructions
       );
       
       // Parse the response and update the structured output
@@ -57,6 +91,15 @@ class AgentNode extends BaseNode {
       this.data.context.push({ role: 'assistant', content: responseText });
       this.updateStructuredOutput(responseData);
       
+      // If there's an onChange handler, call it with the updated data
+      if (this.data.onChange) {
+        this.data.onChange(this.id, { 
+          context: this.data.context,
+          lastOutput: responseText,
+          structuredOutput: this.data.structuredOutput
+        });
+      }
+
       // Combine the response text with any structured data
       return {
         text: responseText,
@@ -64,20 +107,49 @@ class AgentNode extends BaseNode {
       };
     } catch (error) {
       console.error('Error in AI processing:', error);
-      return { text: `Error: ${error.message}`, structuredData: {} };
+      
+      // Update node state with error
+      if (this.data.onChange) {
+        this.data.onChange(this.id, { 
+          error: error.message,
+          lastOutput: `Error: ${error.message}`
+        });
+      }
+      
+      throw error;
     }
   }
 
   processHuman(inputData) {
+    console.log('Processing Human node input:', {
+      nodeId: this.id,
+      inputType: typeof inputData
+    });
+
     // For human nodes, we simply pass through the input
     // In a real implementation, this might involve waiting for actual human input
     this.data.context.push({ role: 'human', content: inputData.text });
+
+    // If there's an onChange handler, call it with the updated data
+    if (this.data.onChange) {
+      this.data.onChange(this.id, { 
+        context: this.data.context,
+        lastInput: inputData.text
+      });
+    }
+
     return inputData;
   }
 
   generateSystemMessage() {
-    // Combine the role and instructions to create a comprehensive system message
-    return `You are a ${this.data.role}. ${this.data.instructions}\n\nPlease format any structured data in your response using JSON, enclosed in triple backticks.`;
+    // Use the agent configuration to generate a comprehensive system message
+    const agentConfig = generateAgentConfiguration({
+      personality: this.data.personality || {},
+      role: this.data.role || {},
+      expertise: this.data.expertise || {}
+    });
+
+    return agentConfig.systemPrompt;
   }
 
   parseInput(inputData) {
@@ -85,8 +157,14 @@ class AgentNode extends BaseNode {
     if (typeof inputData === 'object' && inputData.text) {
       return inputData;
     }
-    // Otherwise, assume it's just text
-    return { text: inputData, structuredData: {} };
+    
+    // If input is a string, convert it to the expected format
+    if (typeof inputData === 'string') {
+      return { text: inputData, structuredData: {} };
+    }
+
+    // Default case
+    return { text: String(inputData), structuredData: {} };
   }
 
   parseOutput(response) {
@@ -118,6 +196,19 @@ class AgentNode extends BaseNode {
 
   getStructuredOutput() {
     return this.data.structuredOutput;
+  }
+
+  // Helper method to get the current context
+  getContext() {
+    return this.data.context;
+  }
+
+  // Helper method to clear the context
+  clearContext() {
+    this.data.context = [];
+    if (this.data.onChange) {
+      this.data.onChange(this.id, { context: [] });
+    }
   }
 }
 

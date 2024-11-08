@@ -21,118 +21,130 @@ const modelOptions = [
 const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
   const [localNode, setLocalNode] = useState(node);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     setLocalNode(node);
   }, [node]);
 
   const handleChange = (key, value) => {
-    const updatedNode = {
-      ...localNode,
-      data: {
-        ...localNode.data,
-        [key]: value
+    try {
+      setError('');
+      const updatedNode = {
+        ...localNode,
+        data: {
+          ...localNode.data,
+          [key]: value
+        }
+      };
+      setLocalNode(updatedNode);
+      
+      // For AI agents, regenerate instructions when relevant settings change
+      if (localNode.type === 'aiAgent' && 
+          ['personality', 'role', 'expertise', 'model', 'apiKeyName'].includes(key)) {
+        const config = generateAgentConfiguration(updatedNode.data);
+        updatedNode.data.systemPrompt = config.systemPrompt;
+        updatedNode.data.modelSettings = config.modelSettings;
       }
-    };
-    setLocalNode(updatedNode);
-    
-    // If this is an AI agent, regenerate instructions when relevant settings change
-    if (localNode.type === 'aiAgent' && 
-        ['personality', 'role', 'expertise'].some(k => k === key)) {
-      const config = generateAgentConfiguration(updatedNode.data);
-      updatedNode.data.systemPrompt = config.systemPrompt;
-      updatedNode.data.modelSettings = config.modelSettings;
+      
+      // Convert apiKeyId to apiKeyName if necessary
+      if (key === 'apiKeyId') {
+        onChange(localNode.id, { 
+          [key]: value,
+          apiKeyName: value // Ensure we set both for compatibility
+        });
+      } else {
+        onChange(localNode.id, { [key]: value });
+      }
+    } catch (error) {
+      console.error('Error updating node:', error);
+      setError(`Failed to update: ${error.message}`);
     }
-    
-    onChange(localNode.id, { [key]: value });
   };
 
-// Update this section in PropertyPanel.jsx
+  const renderInstructions = () => {
+    if (!localNode.data) return null;
 
-const renderInstructions = () => {
-  if (!localNode.data) return null;
+    const config = generateAgentConfiguration({
+      personality: localNode.data.personality || {},
+      role: localNode.data.role || {},
+      expertise: localNode.data.expertise || {}
+    });
 
-  const config = generateAgentConfiguration({
-    personality: localNode.data.personality || {},
-    role: localNode.data.role || {},
-    expertise: localNode.data.expertise || {}
-  });
+    // Default to gpt-3.5-turbo if no model is selected
+    const currentModel = localNode.data.model || 'gpt-3.5-turbo';
+    
+    // Get validated configuration with safe defaults
+    const modelConfig = validateModelConfig(
+      currentModel,
+      config.modelSettings?.temperature,
+      localNode.data.maxTokens
+    );
 
-  // Default to gpt-3.5-turbo if no model is selected
-  const currentModel = localNode.data.model || 'gpt-3.5-turbo';
-  
-  // Get validated configuration with safe defaults
-  const modelConfig = validateModelConfig(
-    currentModel,
-    config.modelSettings?.temperature,
-    localNode.data.maxTokens
-  );
+    const messages = [
+      { role: 'system', content: config.systemPrompt },
+      { role: 'user', content: 'Sample message for token estimation' }
+    ];
 
-  const messages = [
-    { role: 'system', content: config.systemPrompt },
-    { role: 'user', content: 'Sample message for token estimation' }
-  ];
-
-  return (
-    <div className="mt-4 space-y-4">
-      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <div className="flex justify-between items-center mb-2">
-          <Label>System Instructions</Label>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowInstructions(!showInstructions)}
-          >
-            {showInstructions ? 'Hide' : 'Show'}
-          </Button>
-        </div>
-        
-        {showInstructions && (
-          <pre className="whitespace-pre-wrap text-sm font-mono text-gray-700 max-h-96 overflow-y-auto">
-            {config.systemPrompt}
-          </pre>
-        )}
-
-        <div className="mt-4 space-y-2 text-sm text-gray-600">
-          <div className="flex justify-between">
-            <span>Temperature:</span>
-            <span>{modelConfig.temperature.toFixed(2)}</span>
+    return (
+      <div className="mt-4 space-y-4">
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="flex justify-between items-center mb-2">
+            <Label>System Instructions</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowInstructions(!showInstructions)}
+            >
+              {showInstructions ? 'Hide' : 'Show'}
+            </Button>
           </div>
-          <div className="flex justify-between">
-            <span>Max Tokens:</span>
-            <span>{modelConfig.maxTokens}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Model:</span>
-            <span>{modelConfig.model}</span>
-          </div>
-          {config.modelSettings && (
-            <>
-              <div className="flex justify-between">
-                <span>Presence Penalty:</span>
-                <span>{config.modelSettings.presencePenalty.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Frequency Penalty:</span>
-                <span>{config.modelSettings.frequencyPenalty.toFixed(2)}</span>
-              </div>
-            </>
+          
+          {showInstructions && (
+            <pre className="whitespace-pre-wrap text-sm font-mono text-gray-700 max-h-96 overflow-y-auto">
+              {config.systemPrompt}
+            </pre>
           )}
-        </div>
-      </div>
 
-      {/* Only show cost estimation if we have a valid system prompt */}
-      {config.systemPrompt && (
-        <div className="text-sm text-gray-500">
-          Estimated cost per interaction: ${estimateCost(
-            modelConfig.model,
-            estimateTokenUsage(messages)
-          )?.toFixed(4) || '0.0000'}
+          <div className="mt-4 space-y-2 text-sm text-gray-600">
+            <div className="flex justify-between">
+              <span>Temperature:</span>
+              <span>{modelConfig.temperature.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Max Tokens:</span>
+              <span>{modelConfig.maxTokens}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Model:</span>
+              <span>{modelConfig.model}</span>
+            </div>
+            {config.modelSettings && (
+              <>
+                <div className="flex justify-between">
+                  <span>Presence Penalty:</span>
+                  <span>{config.modelSettings.presencePenalty.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Frequency Penalty:</span>
+                  <span>{config.modelSettings.frequencyPenalty.toFixed(2)}</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      )}
-    </div>
-  );
-};
+
+        {config.systemPrompt && (
+          <div className="text-sm text-gray-500">
+            Estimated cost per interaction: ${estimateCost(
+              modelConfig.model,
+              estimateTokenUsage(messages)
+            )?.toFixed(4) || '0.0000'}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (!localNode) return null;
 
@@ -148,6 +160,12 @@ const renderInstructions = () => {
           <Cross2Icon className="h-4 w-4" />
         </Button>
       </div>
+
+      {error && (
+        <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+          {error}
+        </div>
+      )}
       
       <div className="space-y-4">
         <div>
@@ -160,14 +178,17 @@ const renderInstructions = () => {
           />
         </div>
         
-        {localNode.type === 'aiAgent' && (
+        {(localNode.type === 'aiAgent' || localNode.data?.type === 'ai') && (
           <>
             <div>
-              <Label htmlFor="apiKeyId">API Key</Label>
+              <Label htmlFor="apiKeyName">API Key</Label>
               <Select
-                id="apiKeyId"
-                value={localNode.data.apiKeyId || ''}
-                onChange={(e) => handleChange('apiKeyId', e.target.value)}
+                id="apiKeyName"
+                value={localNode.data.apiKeyName || localNode.data.apiKeyId || ''}
+                onChange={(e) => {
+                  handleChange('apiKeyName', e.target.value);
+                  handleChange('apiKeyId', e.target.value); // For backward compatibility
+                }}
                 className="mt-1"
               >
                 <option value="">Select API Key</option>
@@ -177,6 +198,11 @@ const renderInstructions = () => {
                   </option>
                 ))}
               </Select>
+              {!localNode.data.apiKeyName && (
+                <p className="text-sm text-amber-600 mt-1">
+                  Please select an API key to enable this agent
+                </p>
+              )}
             </div>
 
             <div>
@@ -201,12 +227,44 @@ const renderInstructions = () => {
               )}
             </div>
 
-            {/* Display System Instructions and Model Settings */}
+            <div>
+              <Label htmlFor="temperature">Temperature</Label>
+              <Input
+                id="temperature"
+                type="number"
+                min="0"
+                max="2"
+                step="0.1"
+                value={localNode.data.temperature || 0.7}
+                onChange={(e) => handleChange('temperature', parseFloat(e.target.value))}
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Controls randomness: 0 is focused, 1 is balanced, 2 is more creative
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="maxTokens">Max Tokens</Label>
+              <Input
+                id="maxTokens"
+                type="number"
+                min="1"
+                max="4096"
+                value={localNode.data.maxTokens || 150}
+                onChange={(e) => handleChange('maxTokens', parseInt(e.target.value))}
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Maximum length of generated response
+              </p>
+            </div>
+
             {renderInstructions()}
           </>
         )}
         
-        {localNode.type === 'humanAgent' && (
+        {(localNode.type === 'humanAgent' || localNode.data?.type === 'human') && (
           <>
             <div>
               <Label htmlFor="role">Role</Label>

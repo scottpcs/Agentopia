@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactFlow, { 
   Controls, 
   MiniMap, 
   Background,
-  ReactFlowProvider 
+  ReactFlowProvider,
+  useKeyPress 
 } from 'reactflow';
 
 const REACT_FLOW_PROPS = [
@@ -32,12 +33,18 @@ const REACT_FLOW_PROPS = [
   'fitView',
   'proOptions',
   'deleteKeyCode',
+  'onNodeDragStart',
+  'onNodeDrag',
+  'onNodeDragStop',
+  'onNodesDelete',
 ];
 
 const ReactFlowWrapper = (props) => {
   const wrapperRef = useRef(null);
+  const deletePressed = useKeyPress('Delete');
+  const backspacePressed = useKeyPress('Backspace');
 
-  // Separate props using useMemo to optimize performance
+  // Separate props using useMemo
   const { reactFlowProps, divProps } = useMemo(() => {
     const flowProps = {};
     const containerProps = {};
@@ -52,6 +59,16 @@ const ReactFlowWrapper = (props) => {
 
     return { reactFlowProps: flowProps, divProps: containerProps };
   }, [props]);
+
+  // Handle node deletion
+  useEffect(() => {
+    if (deletePressed || backspacePressed) {
+      const selectedNodes = reactFlowProps.nodes?.filter(node => node.selected);
+      if (selectedNodes?.length && reactFlowProps.onNodesDelete) {
+        reactFlowProps.onNodesDelete(selectedNodes);
+      }
+    }
+  }, [deletePressed, backspacePressed, reactFlowProps.nodes, reactFlowProps.onNodesDelete]);
 
   // Set up passive and non-passive event handlers
   useEffect(() => {
@@ -86,7 +103,7 @@ const ReactFlowWrapper = (props) => {
       wrapper.addEventListener(event, handler, { passive: true });
     });
 
-    // Add non-passive event listener only for multi-touch scenarios
+    // Add non-passive event listener for multi-touch scenarios
     const multiTouchOptions = { 
       passive: false,
       capture: true
@@ -117,7 +134,8 @@ const ReactFlowWrapper = (props) => {
     snapGrid: [15, 15],
     minZoom: 0.2,
     maxZoom: 4,
-    fitView: true
+    fitView: true,
+    deleteKeyCode: ['Delete', 'Backspace']
   };
 
   return (
@@ -138,6 +156,25 @@ const ReactFlowWrapper = (props) => {
           {...defaultReactFlowProps}
           {...reactFlowProps}
         >
+          <Controls 
+            showZoom={true}
+            showFitView={true}
+            showInteractive={true}
+            position="bottom-right"
+          />
+          <MiniMap 
+            nodeStrokeColor={(n) => {
+              if (n.type === 'aiAgent') return '#0ea5e9';
+              if (n.type === 'humanAgent') return '#22c55e';
+              return '#64748b';
+            }}
+            nodeColor={(n) => {
+              if (n.type === 'aiAgent') return '#bfdbfe';
+              if (n.type === 'humanAgent') return '#bbf7d0';
+              return '#f1f5f9';
+            }}
+            nodeBorderRadius={2}
+          />
           <Background
             variant="dots"
             gap={12}

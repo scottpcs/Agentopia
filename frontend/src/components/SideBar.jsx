@@ -8,16 +8,11 @@ import {
   Bot, 
   User, 
   MessageCircle,
-  Users 
+  Users,
+  Grip 
 } from 'lucide-react';
 
 const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
-  console.log('Sidebar rendered:', { 
-    agentsCount: agents.length, 
-    hasCreateHandler: !!onCreateAgent,
-    hasAddHandler: !!onAddAgent 
-  });
-
   const nodeTypes = [
     { 
       type: 'aiAgent', 
@@ -53,75 +48,35 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
       type: 'conversation', 
       label: 'Multi-Agent Conversation',
       icon: Users,
-      description: 'Create a conversation between multiple agents',
-      data: {
-        label: 'New Conversation',
-        mode: 'free-form',
-        agents: [],
-        allowHumanParticipation: true,
-        turnManagement: 'dynamic',
-        contextHandling: 'cumulative'
-      }
+      description: 'Create a conversation between multiple agents'
     }
   ];
 
-  const onDragStart = (event, nodeType) => {
-    console.log('Node drag started:', nodeType);
-    
-    let nodeData = {};
-    
-    switch (nodeType.type) {
-      case 'aiAgent':
-        nodeData = {
-          name: 'New AI Agent',
-          type: 'ai',
-          ...defaultAgentConfig,
-          model: 'gpt-3.5-turbo',
-          temperature: 0.7,
-          maxTokens: 1000,
-        };
-        break;
-      case 'humanAgent':
-        nodeData = {
-          name: 'New Human Agent',
-          type: 'human',
-          role: 'Team Member',
-          instructions: 'Please provide input as needed.',
-        };
-        break;
-      case 'conversation':
-        nodeData = nodeType.data;
-        break;
-      default:
-        nodeData = {
-          name: `New ${nodeType.label}`,
-          ...nodeType.data
-        };
-    }
-
+  const onDragStart = (event, nodeType, agentData = null) => {
     event.dataTransfer.setData('application/reactflow', JSON.stringify({
       type: nodeType.type,
-      data: nodeData
+      data: agentData || {
+        label: nodeType.label,
+        ...defaultAgentConfig
+      }
     }));
     event.dataTransfer.effectAllowed = 'move';
-  };
 
-  const handleAgentClick = (agent) => {
-    console.log('Agent selected:', agent);
-    if (onAddAgent) {
-      onAddAgent(agent);
-    } else {
-      console.warn('No onAddAgent handler provided');
-    }
-  };
-
-  const handleCreateAgentClick = () => {
-    console.log('Build Agents button clicked');
-    if (onCreateAgent) {
-      onCreateAgent();
-    } else {
-      console.warn('No onCreateAgent handler provided');
-    }
+    // Create a drag ghost
+    const ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
+    ghost.innerHTML = `
+      <span class="flex items-center gap-2">
+        ${nodeType.icon ? `<i class="text-gray-500"></i>` : ''}
+        <span>${nodeType.label}</span>
+      </span>
+    `;
+    document.body.appendChild(ghost);
+    event.dataTransfer.setDragImage(ghost, 0, 0);
+    
+    setTimeout(() => {
+      document.body.removeChild(ghost);
+    }, 0);
   };
 
   return (
@@ -132,7 +87,7 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
           {nodeTypes.map((nodeType) => (
             <div
               key={nodeType.type}
-              className="node-type cursor-move"
+              className="node-type"
               draggable
               onDragStart={(event) => onDragStart(event, nodeType)}
             >
@@ -140,6 +95,7 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
                 variant="ghost" 
                 className="w-full justify-start text-left text-sm py-1.5 px-2 flex items-center gap-2"
               >
+                <Grip className="w-4 h-4 text-gray-400" />
                 {nodeType.icon && <nodeType.icon className="h-4 w-4" />}
                 <div>
                   <div className="font-medium">{nodeType.label}</div>
@@ -157,20 +113,33 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
           <div className="space-y-2">
             {agents.length > 0 ? (
               agents.map((agent) => (
-                <Button 
+                <div
                   key={agent.id}
-                  onClick={() => handleAgentClick(agent)}
-                  variant="ghost"
-                  className="w-full justify-start text-left text-sm py-1.5 px-2"
-                  title={`Add ${agent.name} to workflow`}
+                  className="agent-item group"
+                  draggable
+                  onDragStart={(event) => onDragStart(event, {
+                    type: agent.type === 'ai' ? 'aiAgent' : 'humanAgent',
+                    label: agent.name
+                  }, agent)}
                 >
-                  <div>
-                    <div className="font-medium">{agent.name}</div>
-                    <div className="text-xs text-gray-500">
-                      {agent.role?.type || 'Custom Agent'}
+                  <Button 
+                    variant="ghost"
+                    className="w-full justify-start text-left text-sm py-1.5 px-2"
+                  >
+                    <Grip className="w-4 h-4 text-gray-400 mr-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    {agent.type === 'ai' ? (
+                      <Bot className="w-4 h-4 text-blue-500 mr-2" />
+                    ) : (
+                      <User className="w-4 h-4 text-green-500 mr-2" />
+                    )}
+                    <div>
+                      <div className="font-medium">{agent.name}</div>
+                      <div className="text-xs text-gray-500">
+                        {agent.role?.type || 'Custom Agent'}
+                      </div>
                     </div>
-                  </div>
-                </Button>
+                  </Button>
+                </div>
               ))
             ) : (
               <p className="text-sm text-gray-500 italic px-2">
@@ -180,24 +149,24 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
           </div>
 
           <Button 
-            onClick={handleCreateAgentClick}
+            onClick={onCreateAgent}
             className="w-full mt-4"
             variant="outline"
           >
             Build Agents
           </Button>
         </div>
-      </div>
 
-      {/* Optional debug information in development */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="mt-auto p-4 border-t border-gray-200 bg-gray-50">
-          <div className="text-xs text-gray-500">
-            <div>Agents: {agents.length}</div>
-            <div>Node Types: {nodeTypes.length}</div>
+        {/* Optional debug information in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-auto p-4 border-t border-gray-200 bg-gray-50">
+            <div className="text-xs text-gray-500">
+              <div>Agents: {agents.length}</div>
+              <div>Node Types: {nodeTypes.length}</div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
@@ -208,6 +177,7 @@ Sidebar.propTypes = {
     PropTypes.shape({
       id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
       name: PropTypes.string.isRequired,
+      type: PropTypes.string.isRequired,
       role: PropTypes.shape({
         type: PropTypes.string,
       }),

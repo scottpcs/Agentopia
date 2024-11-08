@@ -7,9 +7,9 @@ import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Search } from 'lucide-react';
 import { Cross2Icon } from '@radix-ui/react-icons';
+import ModelConfig from './ModelConfig';
 
 // Constants
-const tabs = ['personality', 'role', 'expertise', 'instructions'];
 const COMMON_ROLES = [
   { value: 'researcher', label: 'Researcher' },
   { value: 'analyst', label: 'Analyst' },
@@ -60,13 +60,15 @@ const PersonalitySlider = ({ label, value, onChange, leftLabel, rightLabel }) =>
   );
 };
 
-const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete }) => {
-  console.log('AgentBuilder rendered:', { 
-    isOpen, 
-    agentsCount: agents.length,
-    timestamp: new Date().toISOString() 
-  });
-
+const AgentBuilder = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  onUpdate, 
+  onDelete, 
+  agents = [], 
+  apiKeys = [] 
+}) => {
   // State Management
   const [isCreatingNew, setIsCreatingNew] = useState(true);
   const [selectedAgentId, setSelectedAgentId] = useState(null);
@@ -103,21 +105,25 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
     responsibilityScope: 50
   });
 
+  const [modelConfig, setModelConfig] = useState({
+    model: 'gpt-4o',
+    provider: 'openai',
+    parameters: {
+      temperature: 0.7,
+      maxTokens: 2048
+    }
+  });
+
   // Effects
   useEffect(() => {
-    console.log('AgentBuilder mounted');
-    return () => console.log('AgentBuilder unmounted');
-  }, []);
-
-  useEffect(() => {
     if (selectedAgentId) {
-      console.log('Loading selected agent:', selectedAgentId);
       const selectedAgent = agents.find(a => a.id === selectedAgentId);
       if (selectedAgent) {
         setAgentName(selectedAgent.name);
         setPersonality(selectedAgent.personality || personality);
         setRole(selectedAgent.role || role);
         setExpertise(selectedAgent.expertise || expertise);
+        setModelConfig(selectedAgent.modelConfig || modelConfig);
       }
     }
   }, [selectedAgentId, agents]);
@@ -148,6 +154,14 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
       selectedSkills: [],
       certainty: 50,
       responsibilityScope: 50
+    });
+    setModelConfig({
+      model: 'gpt-4o',
+      provider: 'openai',
+      parameters: {
+        temperature: 0.7,
+        maxTokens: 2048
+      }
     });
     setNameError('');
   };
@@ -189,9 +203,7 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
   };
 
   const handleSave = async () => {
-    console.log('Attempting to save agent');
     if (!validateName()) {
-      console.log('Name validation failed');
       setActiveTab('info');
       return;
     }
@@ -205,10 +217,9 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
           ...role,
           type: role.type === 'custom' ? role.customRole : role.type
         },
-        expertise
+        expertise,
+        modelConfig
       };
-      
-      console.log('Saving agent config:', agentConfig);
 
       if (isCreatingNew) {
         await onSave(agentConfig);
@@ -216,11 +227,10 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
         await onUpdate(selectedAgentId, agentConfig);
       }
 
-      console.log('Agent saved successfully');
       onClose();
     } catch (error) {
       console.error('Error saving agent:', error);
-      // Handle error appropriately
+      setNameError('Failed to save agent: ' + error.message);
     } finally {
       setIsSaving(false);
     }
@@ -229,12 +239,11 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
   const handleDelete = async () => {
     if (selectedAgentId && window.confirm('Are you sure you want to delete this agent?')) {
       try {
-        console.log('Deleting agent:', selectedAgentId);
         await onDelete(selectedAgentId);
         handleCreateNew();
       } catch (error) {
         console.error('Error deleting agent:', error);
-        // Handle error appropriately
+        setNameError('Failed to delete agent: ' + error.message);
       }
     }
   };
@@ -244,31 +253,9 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
     agent.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (!isOpen) {
-    console.log('AgentBuilder not open, returning null');
-    return null;
-  }
-
-  // Render tab content components
+  // Render tab content
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'instructions':
-  return (
-    <div className="space-y-6">
-      <div className="mb-4">
-        <Label className="block mb-2">Generated Instructions</Label>
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <pre className="whitespace-pre-wrap text-sm font-mono">
-            {generateCustomInstructions({ personality, role, expertise })}
-          </pre>
-        </div>
-      </div>
-      <p className="text-sm text-gray-500">
-        These instructions will be sent with each message to guide the AI's responses.
-        They are automatically generated based on your configuration settings.
-      </p>
-    </div>
-  );
       case 'personality':
         return (
           <div className="space-y-6">
@@ -447,10 +434,28 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
           </div>
         );
 
+      case 'model':
+        return (
+          <ModelConfig
+            config={modelConfig}
+            onChange={setModelConfig}
+            apiKeys={apiKeys}
+            systemInstructions={generateCustomInstructions({
+              personality,
+              role,
+              expertise
+            })}
+            customInstructions={role.customRole || ''}
+            error={nameError}
+          />
+        );
+
       default:
         return null;
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div 
@@ -474,7 +479,7 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
                   Create New Agent
                 </Button>
                 <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                   <Input
                     placeholder="Search agents..."
                     value={searchTerm}
@@ -537,7 +542,7 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
 
                 {/* Configuration tabs */}
                 <div className="flex gap-2 mb-4 border-b border-gray-200">
-                  {['personality', 'role', 'expertise'].map(tab => (
+                  {['personality', 'role', 'expertise', 'model'].map(tab => (
                     <button
                       key={tab}
                       className={`px-4 py-2 rounded-t-lg ${
@@ -597,6 +602,32 @@ const AgentBuilder = ({ isOpen, onClose, onSave, agents = [], onUpdate, onDelete
   );
 };
 
+// Add function to generate custom instructions based on agent configuration
+const generateCustomInstructions = ({ personality, role, expertise }) => {
+  const instructions = [];
+
+  // Add personality-based instructions
+  instructions.push(`You are an AI assistant with the following personality traits:`);
+  if (personality.creativity < 33) {
+    instructions.push("- You prioritize practical, proven solutions and conventional approaches");
+  } else if (personality.creativity > 66) {
+    instructions.push("- You often suggest innovative and creative approaches");
+  } else {
+    instructions.push("- You balance practical solutions with creative thinking");
+  }
+  
+  // Add role-based instructions
+  instructions.push(`\nYour role is: ${role.type === 'custom' ? role.customRole : role.type}`);
+  
+  // Add expertise-based instructions
+  instructions.push(`\nExpertise level: ${expertise.level}`);
+  if (expertise.selectedSkills.length > 0) {
+    instructions.push(`Specialized in: ${expertise.selectedSkills.join(', ')}`);
+  }
+
+  return instructions.join('\n');
+};
+
 AgentBuilder.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
@@ -612,12 +643,15 @@ AgentBuilder.propTypes = {
       }),
       personality: PropTypes.object,
       expertise: PropTypes.object,
+      modelConfig: PropTypes.object,
     })
   ),
+  apiKeys: PropTypes.array,
 };
 
 AgentBuilder.defaultProps = {
   agents: [],
+  apiKeys: [],
 };
 
 export default AgentBuilder;

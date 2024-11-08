@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   addEdge,
   useNodesState,
@@ -25,6 +25,20 @@ import { executeWorkflow, stopWorkflowExecution } from './utils/workflowExecutio
 // Styles
 import './App.css';
 
+const onNodeClick = useCallback((event, node) => {
+        // Only handle node clicks if we're not clicking on an input or button
+        if (event.target.tagName === 'INPUT' || 
+            event.target.tagName === 'BUTTON' || 
+            event.target.closest('.property-panel') || // Don't handle clicks in property panel
+            event.defaultPrevented) { // Don't handle if event was already handled
+          return;
+        }
+        setSelectedNode(node);
+        setInteractionMode('interact');
+      }, []);
+
+
+
 const App = () => {
   // Refs
   const reactFlowWrapper = useRef(null);
@@ -45,13 +59,12 @@ const App = () => {
   const [showAgentBuilder, setShowAgentBuilder] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [draggedNode, setDraggedNode] = useState(null);
 
   // State Declarations - Data Management
   const [agents, setAgents] = useState([]);
   const [apiKeys, setApiKeys] = useState([]);
 
-  // Node Change Handler
+  // Node Change Handler - Define before use in other callbacks
   const onNodeChange = useCallback((nodeId, newData) => {
     setNodes((nds) =>
       nds.map((node) => {
@@ -70,60 +83,6 @@ const App = () => {
     );
   }, [setNodes]);
 
-  // Agent Management Functions
-  const handleCreateAgent = useCallback(() => {
-    console.log('Opening AgentBuilder');
-    setShowAgentBuilder(true);
-  }, []);
-
-  const handleSaveAgent = useCallback(async (agentConfig) => {
-    console.log('Saving agent:', agentConfig);
-    const newAgent = {
-      id: Date.now(),
-      ...agentConfig
-    };
-    setAgents(prev => [...prev, newAgent]);
-    setShowAgentBuilder(false);
-  }, []);
-
-  const handleCloseAgentBuilder = useCallback(() => {
-    console.log('Closing AgentBuilder');
-    setShowAgentBuilder(false);
-  }, []);
-
-  const handleUpdateAgent = useCallback((agentId, agentConfig) => {
-    console.log('Updating agent:', { agentId, agentConfig });
-    setAgents(prev => prev.map(agent => 
-      agent.id === agentId ? { ...agent, ...agentConfig } : agent
-    ));
-    setShowAgentBuilder(false);
-  }, []);
-
-  const handleDeleteAgent = useCallback((agentId) => {
-    console.log('Deleting agent:', agentId);
-    setAgents(prev => prev.filter(agent => agent.id !== agentId));
-  }, []);
-
-  const onAddAgent = useCallback((agent) => {
-    if (agent) {
-      const newNode = {
-        id: `aiAgent-${Date.now()}`,
-        type: 'aiAgent',
-        position: { x: 100, y: 100 },
-        data: { 
-          ...agent, 
-          label: agent.name,
-          onChange: onNodeChange,
-          onCreateAgent: handleCreateAgent,
-          apiKeys: apiKeys
-        },
-      };
-      setNodes((nds) => nds.concat(newNode));
-    } else {
-      setShowAgentBuilder(true);
-    }
-  }, [setNodes, onNodeChange, apiKeys, handleCreateAgent]);
-
   // Flow Event Handlers
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
@@ -140,36 +99,13 @@ const App = () => {
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const onNodeDragStart = useCallback((event, node) => {
-    console.log('Node drag started:', node);
-    setDraggedNode(node);
-  }, []);
-  
-  const onNodeDrag = useCallback((event, node) => {
-    // Optional: Add any logic you want to happen during the drag
-    console.log('Node being dragged:', node);
-  }, []);
-  
-  const onNodeDragStop = useCallback((event, node) => {
-    console.log('Node drag stopped:', node);
-    setDraggedNode(null);
-  }, []);
-
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
 
-      // Check if we're dropping on a conversation node
-      const targetElement = event.target.closest('.conversation-node');
-      if (targetElement) {
-        // Let the conversation node handle the drop
-        return;
-      }
-
       try {
-        const dragData = JSON.parse(event.dataTransfer.getData('application/reactflow'));
-        
-        if (!dragData || !dragData.type) {
+        const data = JSON.parse(event.dataTransfer.getData('application/reactflow'));
+        if (!data || !data.type) {
           console.warn('Invalid drop data');
           return;
         }
@@ -184,54 +120,28 @@ const App = () => {
           y: event.clientY,
         });
 
-        // Prepare the node data with all necessary configurations
-        const nodeData = {
-          ...dragData.data,
-          onChange: onNodeChange,
-          onCreateAgent: handleCreateAgent,
-          apiKeys: apiKeys,
-        };
-
-        if (dragData.type === 'aiAgent' || dragData.type === 'humanAgent') {
-          // If this is an agent being dropped, include agent-specific configurations
-          nodeData.model = nodeData.model || 'gpt-3.5-turbo';
-          nodeData.temperature = nodeData.temperature || 0.7;
-          nodeData.maxTokens = nodeData.maxTokens || 150;
-          nodeData.type = dragData.type === 'aiAgent' ? 'ai' : 'human';
-        }
-
         const newNode = {
-          id: `${dragData.type}-${Date.now()}`,
-          type: dragData.type,
+          id: `${data.type}-${Date.now()}`,
+          type: data.type,
           position,
-          data: nodeData,
+          data: {
+            ...data.data,
+            onChange: onNodeChange,
+          },
         };
 
-        console.log('Creating new node:', {
-          type: dragData.type,
-          config: nodeData
-        });
-
+        console.log('Creating new node:', newNode);
         setNodes((nds) => nds.concat(newNode));
       } catch (error) {
         console.error('Error creating node:', error);
         setErrorMessage('Failed to create node: ' + error.message);
       }
     },
-    [reactFlowInstance, setNodes, onNodeChange, apiKeys, handleCreateAgent]
+    [reactFlowInstance, setNodes, onNodeChange]
   );
 
   // Node Interaction Handlers
-  const onNodeClick = useCallback((event, node) => {
-    if (event.target.tagName === 'INPUT' || 
-        event.target.tagName === 'BUTTON' || 
-        event.target.closest('.property-panel') ||
-        event.defaultPrevented) {
-      return;
-    }
-    setSelectedNode(node);
-    setInteractionMode('interact');
-  }, []);
+
 
   const onNodeContextMenu = useCallback((event, node) => {
     event.preventDefault();
@@ -248,21 +158,6 @@ const App = () => {
     setSelectedNode(null);
     setInteractionMode(null);
   }, []);
-
-  // Add a nodes deletion handler
-  const onNodesDelete = useCallback((deleted) => {
-    console.log('Deleting nodes:', deleted);
-    
-    // Clean up any resources associated with deleted nodes
-    deleted.forEach(node => {
-      if (node.type === 'conversation' && node.data.agents) {
-        console.log('Cleaning up conversation agents:', node.data.agents);
-      }
-    });
-    
-    // Update nodes state
-    setNodes(nodes => nodes.filter(node => !deleted.find(del => del.id === node.id)));
-  }, [setNodes]);
 
   // Workflow Management
   const fetchWorkflows = useCallback(async () => {
@@ -305,25 +200,42 @@ const App = () => {
       if (!response.ok) throw new Error('Failed to load workflow');
       const flow = await response.json();
       
-      const nodesWithHandlers = (flow.nodes || []).map(node => ({
+      // Ensure onChange is set for all nodes
+      const nodesWithOnChange = (flow.nodes || []).map(node => ({
         ...node,
-        data: { 
-          ...node.data, 
-          onChange: onNodeChange,
-          onCreateAgent: handleCreateAgent,
-          apiKeys: apiKeys
-        }
+        data: { ...node.data, onChange: onNodeChange }
       }));
       
-      setNodes(nodesWithHandlers);
+      setNodes(nodesWithOnChange);
       setEdges(flow.edges || []);
     } catch (error) {
       console.error('Error loading workflow:', error);
       setErrorMessage('Failed to load workflow');
     }
-  }, [setNodes, setEdges, onNodeChange, apiKeys, handleCreateAgent]);
+  }, [setNodes, setEdges, onNodeChange]);
 
-  // Data Fetching
+  // Data Fetching Effects
+  useEffect(() => {
+    const storedWorkspaces = JSON.parse(localStorage.getItem('recentWorkspaces') || '[]');
+    setRecentWorkspaces(storedWorkspaces);
+    fetchWorkflows();
+    fetchAgents();
+    fetchApiKeys();
+  }, [fetchWorkflows]);
+
+  // Keyboard Event Effect
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setSelectedNode(null);
+        setInteractionMode(null);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, []);
+
+  // Agent Management
   const fetchAgents = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:3000/api/agents');
@@ -348,25 +260,57 @@ const App = () => {
     }
   }, []);
 
-  // Effects
-  useEffect(() => {
-    const storedWorkspaces = JSON.parse(localStorage.getItem('recentWorkspaces') || '[]');
-    setRecentWorkspaces(storedWorkspaces);
-    fetchWorkflows();
-    fetchAgents();
-    fetchApiKeys();
-  }, [fetchWorkflows, fetchAgents, fetchApiKeys]);
-
-  useEffect(() => {
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setSelectedNode(null);
-        setInteractionMode(null);
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+  // Agent Builder Handlers
+  const handleCreateAgent = useCallback(() => {
+    console.log('Opening AgentBuilder');
+    setShowAgentBuilder(true);
   }, []);
+
+  const handleSaveAgent = useCallback(async (agentConfig) => {
+    console.log('Saving agent:', agentConfig);
+    const newAgent = {
+      id: Date.now(),
+      ...agentConfig
+    };
+    setAgents(prev => [...prev, newAgent]);
+    setShowAgentBuilder(false);
+  }, []);
+
+  const handleCloseAgentBuilder = useCallback(() => {
+    console.log('Closing AgentBuilder');
+    setShowAgentBuilder(false);
+  }, []);
+
+  const handleUpdateAgent = useCallback((agentId, agentConfig) => {
+    console.log('Updating agent:', { agentId, agentConfig });
+    setAgents(prev => prev.map(agent => 
+      agent.id === agentId ? { ...agent, ...agentConfig } : agent
+    ));
+    setShowAgentBuilder(false);
+  }, []);
+
+  const handleDeleteAgent = useCallback((agentId) => {
+    console.log('Deleting agent:', agentId);
+    setAgents(prev => prev.filter(agent => agent.id !== agentId));
+  }, []);
+
+  const onAddAgent = useCallback((agent) => {
+    if (agent) {
+      const newNode = {
+        id: `aiAgent-${Date.now()}`,
+        type: 'aiAgent',
+        position: { x: 100, y: 100 },
+        data: { 
+          ...agent, 
+          label: agent.name,
+          onChange: onNodeChange 
+        },
+      };
+      setNodes((nds) => nds.concat(newNode));
+    } else {
+      setShowAgentBuilder(true);
+    }
+  }, [setNodes, onNodeChange]);
 
   // Workflow Execution
   const onExecuteWorkflow = useCallback(async () => {
@@ -421,24 +365,20 @@ const App = () => {
         />
         
         <div className="flow-container" ref={reactFlowWrapper}>
-        <ReactFlowWrapper
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onInit={onInit}
-          nodeTypes={nodeTypes}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-          onNodeClick={onNodeClick}
-          onNodeContextMenu={onNodeContextMenu}
-          onPaneClick={onBackgroundClick}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDrag={onNodeDrag}
-          onNodeDragStop={onNodeDragStop}
-          onNodesDelete={onNodesDelete} // Make sure this is also added
-        />
+          <ReactFlowWrapper
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onInit={onInit}
+            nodeTypes={nodeTypes}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            onNodeClick={onNodeClick}
+            onNodeContextMenu={onNodeContextMenu}
+            onPaneClick={onBackgroundClick}
+          />
         </div>
 
         {selectedNode && interactionMode === 'properties' && (
@@ -481,7 +421,6 @@ const App = () => {
           onUpdate={handleUpdateAgent}
           onDelete={handleDeleteAgent}
           agents={agents}
-          apiKeys={apiKeys}
         />
       )}
 
@@ -509,32 +448,6 @@ const App = () => {
                 />
               </svg>
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Keyboard shortcuts helper */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 right-4 text-xs text-gray-500">
-          <div className="bg-white p-2 rounded shadow-md">
-            <p>Shortcuts:</p>
-            <ul className="list-disc list-inside">
-              <li>Esc: Close panels</li>
-              <li>Delete: Remove selected node</li>
-              <li>Ctrl+S: Save workflow</li>
-              <li>Ctrl+Z: Undo</li>
-              <li>Ctrl+Shift+Z: Redo</li>
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {/* Loading overlay */}
-      {isExecuting && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg shadow-lg">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-2 text-center">Executing Workflow...</p>
           </div>
         </div>
       )}

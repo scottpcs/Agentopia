@@ -1,5 +1,3 @@
-/* App.css */
-
 /* ---------- Layout & General Styles ---------- */
 .app-container {
   width: 100vw;
@@ -101,6 +99,7 @@
   background: white;
   border: 1px solid #e2e8f0;
   min-width: 150px;
+  pointer-events: all !important;
 }
 
 .react-flow__handle {
@@ -122,33 +121,6 @@
 .react-flow__edge-path:hover {
   stroke: #0ea5e9;
   stroke-width: 3;
-}
-
-.react-flow__controls {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-
-.react-flow__controls-button {
-  background-color: white;
-  border: none;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 0.5rem;
-  width: 2rem;
-  height: 2rem;
-}
-
-.react-flow__controls-button:last-child {
-  border-bottom: none;
-}
-
-.react-flow__background {
-  background-color: #fafafa;
-}
-
-.react-flow__background-pattern {
-  color: #e2e8f0;
 }
 
 /* ---------- Node Type Styles ---------- */
@@ -175,6 +147,130 @@
 .human-interaction-node {
   background-color: #f3e8ff;
   border: 1px solid #d8b4fe;
+}
+
+/* ---------- Enhanced Drag and Drop Styles ---------- */
+/* Conversation Node */
+.conversation-node {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  will-change: transform, opacity, border-color;
+  pointer-events: all !important;
+}
+
+.conversation-node.dragging {
+  opacity: 0.7;
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+.conversation-node.drop-target {
+  transform: scale(1.02);
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Drop Zone */
+.drop-zone {
+  border: 2px dashed #e5e7eb;
+  padding: 1rem;
+  margin: 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease-in-out;
+  min-height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f9fafb;
+  pointer-events: all;
+}
+
+.drop-zone.node-drag-active {
+  border-color: #93c5fd;
+  background-color: #eff6ff;
+}
+
+.drop-zone.active-drop-target {
+  border-color: #3b82f6;
+  background-color: #dbeafe;
+  transform: scale(1.02);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Agent Items */
+.agent-item {
+  cursor: move;
+  user-select: none;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 0.375rem;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  transition: all 0.15s ease-in-out;
+}
+
+.agent-item:hover {
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.agent-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  border-style: dashed;
+}
+
+.agent-item .agent-controls {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.agent-item:hover .agent-controls {
+  opacity: 1;
+}
+
+/* Drag Ghost */
+.drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 1000;
+  background: white;
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  max-width: 200px;
+  opacity: 0.9;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Enhanced Z-index Management */
+.react-flow__node {
+  z-index: 1;
+}
+
+.react-flow__node.selected {
+  z-index: 2;
+}
+
+.conversation-node {
+  z-index: 2;
+}
+
+.conversation-node.drop-target {
+  z-index: 1000;
+}
+
+.drag-ghost {
+  z-index: 1001;
 }
 
 /* ---------- Panel Styles ---------- */
@@ -214,6 +310,7 @@
   overflow-y: auto;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
+
 
 /* ---------- Form Elements ---------- */
 .form-group {
@@ -290,7 +387,7 @@
     height: 16px;
   }
   
-  .react-flow__controls button {
+  .react-flow__controls-button {
     width: 32px;
     height: 32px;
   }
@@ -304,9 +401,12 @@
     padding: 1.25rem;
   }
 
-  .react-flow__controls-button {
-    width: 2.5rem;
-    height: 2.5rem;
+  .agent-item {
+    padding: 1rem;
+  }
+
+  .drop-zone {
+    min-height: 6rem;
   }
 }
 
@@ -331,6 +431,32 @@
   white-space: nowrap;
 }
 
+/* ---------- Loading States ---------- */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+
+.loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid #e5e7eb;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ---------- Print Styles ---------- */
 @media print {
   .menu-bar,
@@ -347,21 +473,36 @@
   .main-content {
     overflow: visible;
   }
+
+  .conversation-node {
+    break-inside: avoid;
+  }
 }
 
-/* ---------- React Flow Touch Optimizations ---------- */
-.react-flow__pane {
-  touch-action: none !important;
+/* ---------- React Flow Controls ---------- */
+.react-flow__controls {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 0.5rem;
+  overflow: hidden;
 }
 
-.react-flow__node {
-  touch-action: none !important;
-  -webkit-tap-highlight-color: transparent !important;
+.react-flow__controls-button {
+  background-color: white;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.5rem;
+  width: 2rem;
+  height: 2rem;
 }
 
-.react-flow {
-  -webkit-user-select: none !important;
-  -moz-user-select: none !important;
-  -ms-user-select: none !important;
-  user-select: none !important;
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__background {
+  background-color: #fafafa;
+}
+
+.react-flow__background-pattern {
+  color: #e2e8f0;
 }
