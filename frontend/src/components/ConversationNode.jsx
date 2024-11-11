@@ -3,7 +3,8 @@ import { Handle, Position, useReactFlow } from 'reactflow';
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { 
   Settings2, 
   MessageCircle, 
@@ -40,8 +41,7 @@ const ConversationNode = ({ id, data, isConnectable }) => {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const dropZoneRef = useRef(null);
-  const dragCountRef = useRef(0);
-
+  
   // State declarations
   const [expanded, setExpanded] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -64,17 +64,16 @@ const ConversationNode = ({ id, data, isConnectable }) => {
   const turnManagement = useMemo(() => data?.turnManagement || 'dynamic', [data?.turnManagement]);
   const contextHandling = useMemo(() => data?.contextHandling || 'cumulative', [data?.contextHandling]);
 
-  // Primary functions - important to define these first
+  // Add a participant to the conversation
   const handleAddParticipant = useCallback((agent) => {
     if (data?.onChange && !participants.some(p => p.id === agent.id)) {
-      // Get API keys from props or parent data
       const availableApiKeys = data.apiKeys || [];
       const defaultApiKey = availableApiKeys.length > 0 ? availableApiKeys[0].name : null;
-  
+
       const agentWithDefaults = {
         ...agent,
         id: `${agent.id || 'agent'}-${Date.now()}`,
-        apiKeyId: agent.apiKeyId || data.apiKeyId || defaultApiKey, // Try multiple sources for API key
+        apiKeyId: agent.apiKeyId || data.apiKeyId || defaultApiKey,
         modelConfig: agent.modelConfig || {
           model: 'gpt-4o',
           provider: 'openai',
@@ -87,29 +86,30 @@ const ConversationNode = ({ id, data, isConnectable }) => {
         name: agent.name || 'New Agent',
         instructions: agent.instructions || 'You are a helpful assistant.'
       };
-      
+
       console.log('Adding participant with config:', {
         id: agentWithDefaults.id,
         name: agentWithDefaults.name,
         apiKeyId: agentWithDefaults.apiKeyId,
         model: agentWithDefaults.modelConfig.model
       });
-      
+
       if (!agentWithDefaults.apiKeyId) {
         console.warn('No API key configured for agent:', agentWithDefaults.name);
       }
-      
+
       const newAgents = [...participants, agentWithDefaults];
       data.onChange(id, { agents: newAgents });
     }
   }, [data, id, participants]);
 
+  // Remove a participant from the conversation
   const handleRemoveParticipant = useCallback((event, agentId) => {
     event.stopPropagation();
     if (data?.onChange) {
       const updatedParticipants = participants.filter(p => p.id !== agentId);
       data.onChange(id, { agents: updatedParticipants });
-      
+
       if (selectedParticipant?.id === agentId) {
         setSelectedParticipant(null);
         setShowParticipantConfig(false);
@@ -117,6 +117,7 @@ const ConversationNode = ({ id, data, isConnectable }) => {
     }
   }, [data, participants, selectedParticipant]);
 
+  // Update participant configuration
   const handleParticipantChange = useCallback((participantId, changes) => {
     if (data?.onChange) {
       const updatedParticipants = participants.map(p => {
@@ -133,283 +134,17 @@ const ConversationNode = ({ id, data, isConnectable }) => {
         }
         return p;
       });
-      
+
       data.onChange(id, { agents: updatedParticipants });
     }
   }, [data?.onChange, id, participants, data.apiKeyId]);
 
-  // Drag and Drop Handlers
-  const onNodeDragStart = useCallback((event, node) => {
-    console.log('Node drag start:', {
-      nodeId: node.id,
-      nodeType: node.type
-    });
-    
-    if (node.type === 'aiAgent' || node.type === 'humanAgent') {
-      setIsDraggingNode(true);
-      setDraggedNodeType(node.type);
-      setDragSourceType('canvas');
-    }
-  }, []);
-
-  const onNodeDragStop = useCallback((event, node) => {
-    console.log('Node drag stop:', {
-      nodeId: node.id,
-      nodeType: node.type
-    });
-    
-    // Don't reset immediately to allow drop handling
-    setTimeout(() => {
-      if (isDraggingNode) {
-        setIsDraggingNode(false);
-        setDraggedNodeType(null);
-        setDragSourceType(null);
-      }
-    }, 100);
-  }, [isDraggingNode]);
-
-  const handleDropZoneDragOver = useCallback((event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  
-    console.log('Drop zone drag over:', {
-      isDraggingNode,
-      draggedNodeType,
-      dragSourceType,
-      dataTransfer: event.dataTransfer.types
-    });
-  
-    let isValidDrag = false;
-  
-    if (isDraggingNode && draggedNodeType) {
-      // Handle drag from canvas
-      isValidDrag = true;
-    } else {
-      // Handle drag from sidebar
-      try {
-        const dragData = event.dataTransfer.getData('application/reactflow');
-        if (dragData) {
-          const parsedData = JSON.parse(dragData);
-          console.log('Sidebar drag data:', parsedData);
-          isValidDrag = parsedData.type === 'aiAgent' || parsedData.type === 'humanAgent';
-        }
-      } catch (error) {
-        console.log('Not a valid sidebar drag');
-      }
-    }
-  
-    if (isValidDrag) {
-      console.log('Valid drag detected, activating drop zone');
-      setIsDropZoneActive(true);
-      event.dataTransfer.dropEffect = 'move';
-    }
-  }, [isDraggingNode, draggedNodeType, dragSourceType]);
-
-  const handleDropZoneDragLeave = useCallback((event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDropZoneActive(false);
-  }, []);
-
-  const handleDropZoneDrop = useCallback((event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  
-    console.log('Drop zone drop:', {
-      isDraggingNode,
-      draggedNodeType,
-      dragSourceType,
-      isDropZoneActive
-    });
-  
-    try {
-      let droppedData;
-      let sourceNodeId;
-  
-      if (isDraggingNode && draggedNodeType) {
-        // Handle drop from canvas
-        const draggedNode = reactFlowInstance.getNodes().find(n => n.selected);
-        if (draggedNode) {
-          console.log('Processing canvas node drop:', draggedNode);
-          droppedData = {
-            type: draggedNode.type,
-            data: draggedNode.data,
-            id: draggedNode.id
-          };
-          sourceNodeId = draggedNode.id;
-        }
-      } else {
-        // Handle drop from sidebar
-        const dragData = event.dataTransfer.getData('application/reactflow');
-        if (dragData) {
-          droppedData = JSON.parse(dragData);
-          console.log('Processing sidebar drop:', droppedData);
-        }
-      }
-  
-      if (droppedData && (droppedData.type === 'aiAgent' || droppedData.type === 'humanAgent')) {
-        if (sourceNodeId) {
-          reactFlowInstance.deleteElements({ nodes: [{ id: sourceNodeId }] });
-        }
-  
-        const agentConfig = {
-          ...droppedData.data,
-          id: `${droppedData.type}-${Date.now()}`,
-          type: droppedData.type === 'aiAgent' ? 'ai' : 'human',
-          apiKeyName: droppedData.data.apiKeyName || data.defaultApiKey,
-          model: droppedData.data.model || data.defaultModel
-        };
-  
-        console.log('Adding agent to conversation:', agentConfig);
-        handleAddParticipant(agentConfig);
-      }
-    } catch (error) {
-      console.error('Error handling drop:', error);
-    } finally {
-      setIsDropZoneActive(false);
-      setIsDraggingNode(false);
-      setDraggedNodeType(null);
-      setDragSourceType(null);
-    }
-  }, [isDraggingNode, draggedNodeType, dragSourceType, reactFlowInstance, data, handleAddParticipant]);
-
-  // Drop Zone Component
-  const DropZone = useCallback(() => (
-    <div
-      ref={dropZoneRef}
-      className={`drop-zone ${isDropZoneActive ? 'active-drop-target' : ''} ${
-        isDraggingNode ? 'node-drag-active' : ''
-      }`}
-      onDragOver={handleDropZoneDragOver}
-      onDragEnter={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Drop zone drag enter');
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Drop zone drag leave');
-        setIsDropZoneActive(false);
-      }}
-      onDrop={handleDropZoneDrop}
-      data-nodetype="dropzone"
-    >
-      <div className="text-sm text-gray-500 text-center">
-        {isDropZoneActive ? (
-          <span className="text-blue-500 font-medium">Drop agent here</span>
-        ) : (
-          <span>Drag agents here from canvas or sidebar</span>
-        )}
-      </div>
-    </div>
-  ), [isDropZoneActive, isDraggingNode, handleDropZoneDragOver, handleDropZoneDrop]);
-
-  // Message handling functions
-  const generateAgentInstructions = useCallback((agent) => {
-    const baseInstructions = agent.instructions || 'You are a helpful assistant.';
-    const roleContext = `You are acting as ${getRoleDisplay(agent.role)}.`;
-    const conversationContext = `You are participating in a ${conversationMode} conversation with multiple agents.`;
-    
-    return `${baseInstructions}\n\n${roleContext}\n\n${conversationContext}`;
-  }, [conversationMode]);
-
-  const processAgentResponse = async (agent, messageHistory) => {
-    try {
-      if (!agent.apiKeyName) {
-        throw new Error(`No API key configured for agent: ${agent.name}`);
-      }
-
-      const response = await fetch('http://localhost:3000/api/openai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKeyName: agent.apiKeyName,
-          model: agent.model || 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: generateAgentInstructions(agent)
-            },
-            ...messageHistory.map(m => ({
-              role: m.role,
-              content: m.content
-            }))
-          ],
-          temperature: agent.temperature || 0.7,
-          maxTokens: agent.maxTokens || 150
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || errorData.details || 'Failed to get agent response');
-      }
-
-      const data = await response.json();
-      const content = data.choices[0].message.content;
-
-      const agentMessage = {
-        id: Date.now(),
-        content,
-        sender: agent.name,
-        role: 'assistant',
-        timestamp: new Date().toISOString()
-      };
-
-      setMessages(prev => [...prev, agentMessage]);
-      return content;
-    } catch (error) {
-      console.error(`Error processing agent ${agent.name}:`, error);
-      setError(`Error with agent ${agent.name}: ${error.message}`);
-      throw error;
-    }
-  };
-
-  const processModeratorDecision = async (moderator, messageHistory) => {
-    try {
-      const response = await fetch('http://localhost:3000/api/openai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKeyName: moderator.apiKeyName,
-          model: moderator.model || 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a conversation moderator. Review the context and decide which agents should respond.
-              Available agents: ${participants.map(a => `${a.id} (${getRoleDisplay(a.role)})`).join(', ')}.
-              Respond with a JSON array of agent IDs that should participate.`
-            },
-            ...messageHistory.map(m => ({
-              role: m.role,
-              content: m.content
-            }))
-          ],
-          temperature: 0.3,
-          maxTokens: 100
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to get moderator decision');
-      
-      const data = await response.json();
-      try {
-        return JSON.parse(data.choices[0].message.content);
-      } catch {
-        return [];
-      }
-    } catch (error) {
-      console.error('Error in moderator decision:', error);
-      return [];
-    }
-  };
-
+  // Message handling
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() || isProcessing) return;
 
     const configuredAgents = participants.filter(agent => 
-      agent.type === 'ai' ? (agent.apiKeyName && agent.model) : true
+      agent.type === 'ai' ? (agent.apiKeyId && agent.modelConfig?.model) : true
     );
 
     if (configuredAgents.length === 0) {
@@ -429,13 +164,13 @@ const ConversationNode = ({ id, data, isConnectable }) => {
         role: 'user',
         timestamp: new Date().toISOString()
       };
-      
+
       setMessages(prev => [...prev, userMessage]);
       setInputMessage('');
 
       // Process with active agents based on conversation mode
       const aiAgents = configuredAgents.filter(agent => agent.type === 'ai');
-      
+
       switch (conversationMode) {
         case 'round-robin':
           for (const agent of aiAgents) {
@@ -470,8 +205,71 @@ const ConversationNode = ({ id, data, isConnectable }) => {
       setIsProcessing(false);
       inputRef.current?.focus();
     }
-  }, [inputMessage, isProcessing, messages, participants, conversationMode, processAgentResponse]);
+  }, [inputMessage, isProcessing, messages, participants, conversationMode]);
 
+  // Process agent responses
+  const processAgentResponse = async (agent, messageHistory) => {
+    try {
+      if (!agent.apiKeyId) {
+        throw new Error(`No API key configured for agent: ${agent.name}`);
+      }
+
+      const response = await fetch('http://localhost:3000/api/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKeyId: agent.apiKeyId,
+          model: agent.modelConfig?.model || 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: generateAgentInstructions(agent)
+            },
+            ...messageHistory.map(m => ({
+              role: m.role,
+              content: m.content
+            }))
+          ],
+          temperature: agent.modelConfig?.parameters?.temperature || 0.7,
+          maxTokens: agent.modelConfig?.parameters?.maxTokens || 2048
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || 'Failed to get agent response');
+      }
+
+      const data = await response.json();
+      const content = data.choices[0].message.content;
+
+      const agentMessage = {
+        id: Date.now(),
+        content,
+        sender: agent.name,
+        role: 'assistant',
+        timestamp: new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, agentMessage]);
+      return content;
+    } catch (error) {
+      console.error(`Error processing agent ${agent.name}:`, error);
+      setError(`Error with agent ${agent.name}: ${error.message}`);
+      throw error;
+    }
+  };
+
+  // Generate instructions for agents
+  const generateAgentInstructions = useCallback((agent) => {
+    const baseInstructions = agent.instructions || 'You are a helpful assistant.';
+    const roleContext = `You are acting as ${getRoleDisplay(agent.role)}.`;
+    const conversationContext = `You are participating in a ${conversationMode} conversation with multiple agents.`;
+    
+    return `${baseInstructions}\n\n${roleContext}\n\n${conversationContext}`;
+  }, [conversationMode]);
+
+  // Handle key press events
   const handleKeyPress = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -479,16 +277,151 @@ const ConversationNode = ({ id, data, isConnectable }) => {
     }
   }, [handleSendMessage]);
 
-  const handleParticipantConfig = useCallback((event, participant) => {
-    event.stopPropagation();
-    setSelectedParticipant({
-      ...participant,
-      apiKeyId: participant.apiKeyId || data.apiKeyId // Ensure API key is passed
-    });
-    setShowParticipantConfig(true);
-  }, [data.apiKeyId]);
+  // Process moderator decisions
+  const processModeratorDecision = async (moderator, messageHistory) => {
+    try {
+      const response = await fetch('http://localhost:3000/api/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKeyId: moderator.apiKeyId,
+          model: moderator.modelConfig?.model || 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a conversation moderator. Review the context and decide which agents should respond.
+              Available agents: ${participants.map(a => `${a.id} (${getRoleDisplay(a.role)})`).join(', ')}.
+              Respond with a JSON array of agent IDs that should participate.`
+            },
+            ...messageHistory.map(m => ({
+              role: m.role,
+              content: m.content
+            }))
+          ],
+          temperature: 0.3,
+          maxTokens: 100
+        }),
+      });
 
-  // Rendering functions
+      if (!response.ok) throw new Error('Failed to get moderator decision');
+      
+      const data = await response.json();
+      try {
+        return JSON.parse(data.choices[0].message.content);
+      } catch {
+        return [];
+      }
+    } catch (error) {
+      console.error('Error in moderator decision:', error);
+      return [];
+    }
+  };
+
+  // Handle drag and drop functionality
+  const handleDropZoneDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    let isValidDrag = false;
+
+    if (isDraggingNode && draggedNodeType) {
+      isValidDrag = true;
+    } else {
+      try {
+        const dragData = event.dataTransfer.getData('application/reactflow');
+        if (dragData) {
+          const parsedData = JSON.parse(dragData);
+          isValidDrag = parsedData.type === 'aiAgent' || parsedData.type === 'humanAgent';
+        }
+      } catch (error) {
+        console.log('Not a valid sidebar drag');
+      }
+    }
+
+    if (isValidDrag) {
+      setIsDropZoneActive(true);
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }, [isDraggingNode, draggedNodeType]);
+
+  const handleDropZoneDragLeave = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDropZoneActive(false);
+  }, []);
+
+  const handleDropZoneDrop = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      let droppedData;
+      let sourceNodeId;
+
+      if (isDraggingNode && draggedNodeType) {
+        const draggedNode = reactFlowInstance.getNodes().find(n => n.selected);
+        if (draggedNode) {
+          droppedData = {
+            type: draggedNode.type,
+            data: draggedNode.data,
+            id: draggedNode.id
+          };
+          sourceNodeId = draggedNode.id;
+        }
+      } else {
+        const dragData = event.dataTransfer.getData('application/reactflow');
+        if (dragData) {
+          droppedData = JSON.parse(dragData);
+        }
+      }
+
+      if (droppedData && (droppedData.type === 'aiAgent' || droppedData.type === 'humanAgent')) {
+        if (sourceNodeId) {
+          reactFlowInstance.deleteElements({ nodes: [{ id: sourceNodeId }] });
+        }
+
+        const agentConfig = {
+          ...droppedData.data,
+          id: `${droppedData.type}-${Date.now()}`,
+          type: droppedData.type === 'aiAgent' ? 'ai' : 'human'
+        };
+
+        console.log('Adding agent to conversation:', agentConfig);
+        handleAddParticipant(agentConfig);
+      }
+    } catch (error) {
+      console.error('Error handling drop:', error);
+    } finally {
+      setIsDropZoneActive(false);
+      setIsDraggingNode(false);
+      setDraggedNodeType(null);
+      setDragSourceType(null);
+    }
+  }, [isDraggingNode, draggedNodeType, reactFlowInstance, handleAddParticipant]);
+
+  // Render functions
+  const DropZone = useCallback(() => (
+    <div
+      ref={dropZoneRef}
+      className={`drop-zone ${isDropZoneActive ? 'active-drop-target' : ''} ${
+        isDraggingNode ? 'node-drag-active' : ''
+      }`}
+      onDragOver={handleDropZoneDragOver}
+      onDragLeave={handleDropZoneDragLeave}
+      onDrop={handleDropZoneDrop}
+      data-nodetype="dropzone"
+    >
+      <div className="text-sm text-gray-500 text-center">
+        {isDropZoneActive ? (
+          <span className="text-blue-500 font-medium">Drop agent here</span>
+        ) : (
+          <span>Drag agents here from canvas or sidebar</span>
+        )}
+      </div>
+    </div>
+  ), [isDropZoneActive, isDraggingNode, handleDropZoneDragOver, handleDropZoneDragLeave, handleDropZoneDrop]);
+
+  // Message rendering
   const renderMessage = useCallback((message) => {
     const getMessageStyle = () => {
       switch (message.role) {
@@ -528,6 +461,7 @@ const ConversationNode = ({ id, data, isConnectable }) => {
     );
   }, []);
 
+  // Participant list rendering
   const renderParticipantList = useCallback(() => {
     return participants.map((agent) => (
       <div
@@ -551,7 +485,11 @@ const ConversationNode = ({ id, data, isConnectable }) => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => handleParticipantConfig(e, agent)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedParticipant(agent);
+              setShowParticipantConfig(true);
+            }}
             title="Configure Agent"
           >
             <Settings2 className="w-4 h-4 text-gray-500" />
@@ -568,7 +506,7 @@ const ConversationNode = ({ id, data, isConnectable }) => {
         </div>
       </div>
     ));
-  }, [participants, handleParticipantConfig, handleRemoveParticipant]);
+  }, [participants, handleRemoveParticipant]);
 
   // Main render
   return (
@@ -628,34 +566,37 @@ const ConversationNode = ({ id, data, isConnectable }) => {
           {/* Settings Panel */}
           {showSettings && (
             <Card className="mb-4">
-            <CardHeader>
-              <CardTitle className="text-base">API Configuration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <Label>API Key</Label>
-                <Select
-                  value={selectedParticipant.apiKeyId || ''}
-                  onChange={(e) => handleParticipantChange(selectedParticipant.id, {
-                    apiKeyId: e.target.value
-                  })}
-                  className="mt-1"
-                >
-                  <option value="">Select API Key</option>
-                  {apiKeys.map(key => (
-                    <option key={key.id} value={key.name}>
-                      {key.name}
-                    </option>
-                  ))}
-                </Select>
-                {!selectedParticipant.apiKeyId && (
-                  <p className="text-sm text-red-500 mt-1">
-                    Please select an API key for this agent
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+              <CardHeader>
+                <CardTitle className="text-base">Conversation Settings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Conversation Mode</Label>
+                    <Select
+                      value={conversationMode}
+                      onChange={(e) => data?.onChange?.(id, { mode: e.target.value })}
+                      className="mt-1"
+                    >
+                      <option value="free-form">Free-form</option>
+                      <option value="round-robin">Round Robin</option>
+                      <option value="moderated">Moderated</option>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="checkbox"
+                      id="allowHuman"
+                      checked={allowHumanParticipation}
+                      onChange={(e) => data?.onChange?.(id, { 
+                        allowHumanParticipation: e.target.checked 
+                      })}
+                    />
+                    <Label htmlFor="allowHuman">Allow Human Participation</Label>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Participants Section */}
@@ -676,7 +617,6 @@ const ConversationNode = ({ id, data, isConnectable }) => {
               {renderParticipantList()}
             </div>
 
-            {/* Drop Zone */}
             <DropZone />
 
             {/* Error Display */}

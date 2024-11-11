@@ -4,30 +4,38 @@
  * Default configuration values for new agents
  */
 export const defaultAgentConfig = {
-    personality: {
-      creativity: 50,
-      tone: 50,
-      empathy: 50,
-      assertiveness: 50,
-      humor: 50,
-      optimism: 50
-    },
-    role: {
-      type: 'assistant',
-      customRole: '',
-      goalOrientation: 50,
-      contributionStyle: 50,
-      taskEmphasis: 50,
-      domainScope: 50
-    },
-    expertise: {
-      level: 'intermediate',
-      knowledgeBalance: 50,
-      selectedSkills: [],
-      certainty: 50,
-      responsibilityScope: 50
+  personality: {
+    creativity: 50,
+    tone: 50,
+    empathy: 50,
+    assertiveness: 50,
+    humor: 50,
+    optimism: 50
+  },
+  role: {
+    type: 'assistant',
+    customRole: '',
+    goalOrientation: 50,
+    contributionStyle: 50,
+    taskEmphasis: 50,
+    domainScope: 50
+  },
+  expertise: {
+    level: 'intermediate',
+    knowledgeBalance: 50,
+    selectedSkills: [],
+    certainty: 50,
+    responsibilityScope: 50
+  },
+  modelConfig: {
+    model: 'gpt-4o',
+    provider: 'openai',
+    parameters: {
+      temperature: 0.7,
+      maxTokens: 2048
     }
-  };
+  }
+};
   
   /**
    * Converts personality traits to descriptive text

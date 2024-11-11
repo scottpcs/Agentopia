@@ -1,39 +1,111 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search } from 'lucide-react';
 import { Cross2Icon } from '@radix-ui/react-icons';
+import { Bot, User, Grip } from 'lucide-react';
+import { MODEL_CONFIGS } from '../utils/modelConfigUtils';
+import { validateModelConfig } from '../utils/modelConfigUtils';
+import { generateAgentConfiguration } from '../utils/agentConfigConverter';
 import ModelConfig from './ModelConfig';
 
-// Constants
-const COMMON_ROLES = [
+// Personality trait definitions
+const PERSONALITY_TRAITS = [
+  {
+    name: 'creativity',
+    label: 'Creativity Level',
+    leftLabel: 'Practical',
+    rightLabel: 'Imaginative'
+  },
+  {
+    name: 'tone',
+    label: 'Communication Tone',
+    leftLabel: 'Formal',
+    rightLabel: 'Casual'
+  },
+  {
+    name: 'empathy',
+    label: 'Empathy Level',
+    leftLabel: 'Analytical',
+    rightLabel: 'Empathetic'
+  },
+  {
+    name: 'assertiveness',
+    label: 'Assertiveness',
+    leftLabel: 'Reserved',
+    rightLabel: 'Direct'
+  },
+  {
+    name: 'humor',
+    label: 'Humor',
+    leftLabel: 'Serious',
+    rightLabel: 'Playful'
+  },
+  {
+    name: 'optimism',
+    label: 'Outlook',
+    leftLabel: 'Cautious',
+    rightLabel: 'Optimistic'
+  }
+];
+
+// Role configuration options
+const ROLE_TYPES = [
   { value: 'researcher', label: 'Researcher' },
   { value: 'analyst', label: 'Analyst' },
   { value: 'planner', label: 'Project Planner' },
   { value: 'coordinator', label: 'Coordinator' },
   { value: 'reviewer', label: 'Technical Reviewer' },
   { value: 'writer', label: 'Technical Writer' },
-  { value: 'consultant', label: 'Consultant' }
+  { value: 'consultant', label: 'Consultant' },
+  { value: 'custom', label: 'Custom Role' }
 ];
 
-const SPECIALIZED_SKILLS = [
-  'Statistics',
-  'Machine Learning',
-  'Data Analysis',
-  'Software Development',
-  'Technical Writing',
-  'Project Management',
-  'Quality Assurance',
-  'Requirements Analysis'
+const EXPERTISE_LEVELS = [
+  { value: 'novice', label: 'Novice' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'expert', label: 'Expert' }
 ];
 
-// Slider Component
+// Initial state for a new agent
+const initialAgentState = {
+  personality: {
+    creativity: 50,
+    tone: 50,
+    empathy: 50,
+    assertiveness: 50,
+    humor: 50,
+    optimism: 50
+  },
+  role: {
+    type: '',
+    customRole: '',
+    goalOrientation: 50,
+    contributionStyle: 50,
+    taskEmphasis: 50,
+    domainScope: 50
+  },
+  expertise: {
+    level: 'intermediate',
+    knowledgeBalance: 50,
+    selectedSkills: [],
+    certainty: 50,
+    responsibilityScope: 50
+  },
+  modelConfig: {
+    model: 'gpt-4o',
+    provider: 'openai',
+    parameters: {
+      temperature: 0.7,
+      maxTokens: 2048
+    }
+  }
+};
+
+// Slider component for configuration values
 const PersonalitySlider = ({ label, value, onChange, leftLabel, rightLabel }) => {
-  console.log(`Rendering slider: ${label} with value: ${value}`);
   return (
     <div className="mb-4">
       <Label className="block mb-2">{label}</Label>
@@ -44,11 +116,7 @@ const PersonalitySlider = ({ label, value, onChange, leftLabel, rightLabel }) =>
           min="0"
           max="100"
           value={value}
-          onChange={(e) => {
-            const newValue = parseInt(e.target.value);
-            console.log(`Slider ${label} changed to: ${newValue}`);
-            onChange(newValue);
-          }}
+          onChange={(e) => onChange(parseInt(e.target.value, 10))}
           className="flex-grow h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
         />
         <span className="text-xs text-gray-500 w-24 text-right">{rightLabel}</span>
@@ -59,7 +127,7 @@ const PersonalitySlider = ({ label, value, onChange, leftLabel, rightLabel }) =>
     </div>
   );
 };
-
+// Main AgentBuilder component
 const AgentBuilder = ({ 
   isOpen, 
   onClose, 
@@ -69,7 +137,7 @@ const AgentBuilder = ({
   agents = [], 
   apiKeys = [] 
 }) => {
-  // State Management
+  // State management
   const [isCreatingNew, setIsCreatingNew] = useState(true);
   const [selectedAgentId, setSelectedAgentId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,109 +146,51 @@ const AgentBuilder = ({
   const [activeTab, setActiveTab] = useState('personality');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Configuration States
-  const [personality, setPersonality] = useState({
-    creativity: 50,
-    tone: 50,
-    empathy: 50,
-    assertiveness: 50,
-    humor: 50,
-    optimism: 50
-  });
+  // Configuration states
+  const [personality, setPersonality] = useState(initialAgentState.personality);
+  const [role, setRole] = useState(initialAgentState.role);
+  const [expertise, setExpertise] = useState(initialAgentState.expertise);
+  const [modelConfig, setModelConfig] = useState(initialAgentState.modelConfig);
 
-  const [role, setRole] = useState({
-    type: '',
-    customRole: '',
-    goalOrientation: 50,
-    contributionStyle: 50,
-    taskEmphasis: 50,
-    domainScope: 50
-  });
-
-  const [expertise, setExpertise] = useState({
-    level: 'intermediate',
-    knowledgeBalance: 50,
-    selectedSkills: [],
-    certainty: 50,
-    responsibilityScope: 50
-  });
-
-  const [modelConfig, setModelConfig] = useState({
-    model: 'gpt-4o',
-    provider: 'openai',
-    parameters: {
-      temperature: 0.7,
-      maxTokens: 2048
-    }
-  });
-
-  // Effects
+  // Effect to load selected agent data
   useEffect(() => {
     if (selectedAgentId) {
       const selectedAgent = agents.find(a => a.id === selectedAgentId);
       if (selectedAgent) {
         setAgentName(selectedAgent.name);
-        setPersonality(selectedAgent.personality || personality);
-        setRole(selectedAgent.role || role);
-        setExpertise(selectedAgent.expertise || expertise);
-        setModelConfig(selectedAgent.modelConfig || modelConfig);
+        setPersonality(selectedAgent.personality || initialAgentState.personality);
+        setRole(selectedAgent.role || initialAgentState.role);
+        setExpertise(selectedAgent.expertise || initialAgentState.expertise);
+        setModelConfig(selectedAgent.modelConfig || initialAgentState.modelConfig);
       }
     }
   }, [selectedAgentId, agents]);
 
-  // Reset Form Function
+  // Reset form to initial state
   const resetForm = () => {
-    console.log('Resetting form');
     setAgentName('');
-    setPersonality({
-      creativity: 50,
-      tone: 50,
-      empathy: 50,
-      assertiveness: 50,
-      humor: 50,
-      optimism: 50
-    });
-    setRole({
-      type: '',
-      customRole: '',
-      goalOrientation: 50,
-      contributionStyle: 50,
-      taskEmphasis: 50,
-      domainScope: 50
-    });
-    setExpertise({
-      level: 'intermediate',
-      knowledgeBalance: 50,
-      selectedSkills: [],
-      certainty: 50,
-      responsibilityScope: 50
-    });
-    setModelConfig({
-      model: 'gpt-4o',
-      provider: 'openai',
-      parameters: {
-        temperature: 0.7,
-        maxTokens: 2048
-      }
-    });
+    setPersonality(initialAgentState.personality);
+    setRole(initialAgentState.role);
+    setExpertise(initialAgentState.expertise);
+    setModelConfig(initialAgentState.modelConfig);
     setNameError('');
   };
 
-  // Handler Functions
+  // Handle creating new agent
   const handleCreateNew = () => {
-    console.log('Creating new agent');
     setIsCreatingNew(true);
     setSelectedAgentId(null);
     resetForm();
   };
 
+  // Handle selecting existing agent
   const handleSelectAgent = (agentId) => {
-    console.log('Selecting agent:', agentId);
     setIsCreatingNew(false);
     setSelectedAgentId(agentId);
     setNameError('');
   };
 
+  // Validate agent name
   const validateName = () => {
     if (!agentName.trim()) {
       setNameError('Agent name is required');
@@ -202,6 +212,7 @@ const AgentBuilder = ({
     return true;
   };
 
+  // Handle saving agent
   const handleSave = async () => {
     if (!validateName()) {
       setActiveTab('info');
@@ -210,16 +221,46 @@ const AgentBuilder = ({
 
     try {
       setIsSaving(true);
+      
+      // Create the agent configuration with explicit AI type
       const agentConfig = {
+        id: selectedAgentId || `aiAgent-${Date.now()}`,
         name: agentName.trim(),
-        personality,
-        role: {
-          ...role,
-          type: role.type === 'custom' ? role.customRole : role.type
-        },
-        expertise,
-        modelConfig
+        type: 'aiAgent', // Explicitly set node type for React Flow
+        data: {
+          name: agentName.trim(),
+          type: 'ai', // Internal type for agent behavior
+          personality,
+          role: {
+            ...role,
+            type: role.type === 'custom' ? role.customRole : role.type
+          },
+          expertise,
+          modelConfig: validateModelConfig(
+            modelConfig.model,
+            modelConfig.parameters.temperature,
+            modelConfig.parameters.maxTokens
+          ),
+          // Required AI agent properties
+          apiKeyId: modelConfig.apiKeyId,
+          model: modelConfig.model,
+          temperature: modelConfig.parameters.temperature,
+          maxTokens: modelConfig.parameters.maxTokens,
+          onChange: undefined // Will be set by the node on render
+        }
       };
+
+      // Generate system instructions
+      const systemConfig = generateAgentConfiguration({
+        personality,
+        role,
+        expertise
+      });
+
+      agentConfig.data.instructions = systemConfig.systemPrompt;
+      agentConfig.data.modelSettings = systemConfig.modelSettings;
+
+      console.log('Saving AI agent with configuration:', agentConfig);
 
       if (isCreatingNew) {
         await onSave(agentConfig);
@@ -236,6 +277,7 @@ const AgentBuilder = ({
     }
   };
 
+  // Handle deleting agent
   const handleDelete = async () => {
     if (selectedAgentId && window.confirm('Are you sure you want to delete this agent?')) {
       try {
@@ -252,55 +294,22 @@ const AgentBuilder = ({
   const filteredAgents = agents.filter(agent => 
     agent.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // Render tab content
+  // Render tab content based on active tab
   const renderTabContent = () => {
     switch (activeTab) {
       case 'personality':
         return (
           <div className="space-y-6">
-            <PersonalitySlider
-              label="Creativity Level"
-              value={personality.creativity}
-              onChange={(value) => setPersonality(prev => ({ ...prev, creativity: value }))}
-              leftLabel="Practical"
-              rightLabel="Imaginative"
-            />
-            <PersonalitySlider
-              label="Communication Tone"
-              value={personality.tone}
-              onChange={(value) => setPersonality(prev => ({ ...prev, tone: value }))}
-              leftLabel="Formal"
-              rightLabel="Casual"
-            />
-            <PersonalitySlider
-              label="Empathy Level"
-              value={personality.empathy}
-              onChange={(value) => setPersonality(prev => ({ ...prev, empathy: value }))}
-              leftLabel="Analytical"
-              rightLabel="Empathetic"
-            />
-            <PersonalitySlider
-              label="Assertiveness"
-              value={personality.assertiveness}
-              onChange={(value) => setPersonality(prev => ({ ...prev, assertiveness: value }))}
-              leftLabel="Reserved"
-              rightLabel="Direct"
-            />
-            <PersonalitySlider
-              label="Humor"
-              value={personality.humor}
-              onChange={(value) => setPersonality(prev => ({ ...prev, humor: value }))}
-              leftLabel="Serious"
-              rightLabel="Playful"
-            />
-            <PersonalitySlider
-              label="Outlook"
-              value={personality.optimism}
-              onChange={(value) => setPersonality(prev => ({ ...prev, optimism: value }))}
-              leftLabel="Cautious"
-              rightLabel="Optimistic"
-            />
+            {PERSONALITY_TRAITS.map(trait => (
+              <PersonalitySlider
+                key={trait.name}
+                label={trait.label}
+                value={personality[trait.name]}
+                onChange={(value) => setPersonality(prev => ({ ...prev, [trait.name]: value }))}
+                leftLabel={trait.leftLabel}
+                rightLabel={trait.rightLabel}
+              />
+            ))}
           </div>
         );
 
@@ -309,19 +318,18 @@ const AgentBuilder = ({
           <div className="space-y-6">
             <div className="mb-4">
               <Label>Role Type</Label>
-              <Select
+              <select
                 value={role.type}
                 onChange={(e) => setRole(prev => ({ ...prev, type: e.target.value }))}
-                className="mt-1"
+                className="w-full mt-1 p-2 border rounded-md"
               >
                 <option value="">Select a role...</option>
-                {COMMON_ROLES.map(role => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
+                {ROLE_TYPES.map(roleType => (
+                  <option key={roleType.value} value={roleType.value}>
+                    {roleType.label}
                   </option>
                 ))}
-                <option value="custom">Custom Role</option>
-              </Select>
+              </select>
             </div>
 
             {role.type === 'custom' && (
@@ -372,15 +380,17 @@ const AgentBuilder = ({
           <div className="space-y-6">
             <div className="mb-4">
               <Label>Expertise Level</Label>
-              <Select
+              <select
                 value={expertise.level}
                 onChange={(e) => setExpertise(prev => ({ ...prev, level: e.target.value }))}
-                className="mt-1"
+                className="w-full mt-1 p-2 border rounded-md"
               >
-                <option value="novice">Novice</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="expert">Expert</option>
-              </Select>
+                {EXPERTISE_LEVELS.map(level => (
+                  <option key={level.value} value={level.value}>
+                    {level.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <PersonalitySlider
@@ -390,31 +400,6 @@ const AgentBuilder = ({
               leftLabel="Broad Knowledge"
               rightLabel="Deep Specialization"
             />
-
-            <div className="mb-4">
-              <Label className="block mb-2">Specialized Skills</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {SPECIALIZED_SKILLS.map(skill => (
-                  <div key={skill} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id={skill}
-                      checked={expertise.selectedSkills.includes(skill)}
-                      onChange={() => {
-                        setExpertise(prev => ({
-                          ...prev,
-                          selectedSkills: expertise.selectedSkills.includes(skill)
-                            ? expertise.selectedSkills.filter(s => s !== skill)
-                            : [...expertise.selectedSkills, skill]
-                        }));
-                      }}
-                      className="mr-2"
-                    />
-                    <label htmlFor={skill}>{skill}</label>
-                  </div>
-                ))}
-              </div>
-            </div>
 
             <PersonalitySlider
               label="Certainty Level"
@@ -440,12 +425,11 @@ const AgentBuilder = ({
             config={modelConfig}
             onChange={setModelConfig}
             apiKeys={apiKeys}
-            systemInstructions={generateCustomInstructions({
+            systemInstructions={generateAgentConfiguration({
               personality,
               role,
               expertise
-            })}
-            customInstructions={role.customRole || ''}
+            }).systemPrompt}
             error={nameError}
           />
         );
@@ -459,32 +443,30 @@ const AgentBuilder = ({
 
   return (
     <div 
-      className="fixed inset-0 z-50 overflow-y-auto"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50"
       aria-labelledby="modal-title"
       role="dialog"
       aria-modal="true"
     >
-      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
-
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="relative w-full max-w-5xl bg-white rounded-lg shadow-xl">
           <div className="flex h-full">
             {/* Left sidebar for agent selection */}
-            <div className="w-64 border-r border-gray-200 p-4 bg-gray-50">
+            <div className="w-64 border-r border-gray-200 p-4">
               <div className="mb-4">
                 <Button 
-                  className="w-full mb-4"
                   onClick={handleCreateNew}
+                  className="w-full mb-4"
                 >
                   Create New Agent
                 </Button>
                 <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                   <Input
+                    type="text"
                     placeholder="Search agents..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8"
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -498,9 +480,14 @@ const AgentBuilder = ({
                     onClick={() => handleSelectAgent(agent.id)}
                   >
                     <CardContent className="p-3">
-                      <div className="font-medium">{agent.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {agent.role?.type || 'Custom Agent'}
+                      <div className="flex items-center gap-2">
+                        <Bot className="w-4 h-4 text-blue-500" />
+                        <div>
+                          <div className="font-medium">{agent.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {agent.role?.type || 'Custom Agent'}
+                          </div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -519,7 +506,6 @@ const AgentBuilder = ({
                     variant="ghost" 
                     onClick={onClose}
                     className="p-1 h-auto"
-                    aria-label="Close"
                   >
                     <Cross2Icon className="h-4 w-4" />
                   </Button>
@@ -543,17 +529,17 @@ const AgentBuilder = ({
                 {/* Configuration tabs */}
                 <div className="flex gap-2 mb-4 border-b border-gray-200">
                   {['personality', 'role', 'expertise', 'model'].map(tab => (
-                    <button
+                    <Button
                       key={tab}
-                      className={`px-4 py-2 rounded-t-lg ${
-                        activeTab === tab
-                          ? 'bg-white text-blue-600 border-t border-x border-gray-200'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
+                      variant={activeTab === tab ? 'default' : 'ghost'}
                       onClick={() => setActiveTab(tab)}
+                      className="relative px-4 py-2"
                     >
                       {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    </button>
+                      {activeTab === tab && (
+                        <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500" />
+                      )}
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -588,8 +574,16 @@ const AgentBuilder = ({
                     <Button 
                       onClick={handleSave}
                       disabled={isSaving}
+                      className="min-w-[100px]"
                     >
-                      {isSaving ? 'Saving...' : (isCreatingNew ? 'Create Agent' : 'Update Agent')}
+                      {isSaving ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-opacity-50 border-t-white mr-2"></div>
+                          Saving...
+                        </div>
+                      ) : (
+                        isCreatingNew ? 'Create Agent' : 'Update Agent'
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -602,32 +596,6 @@ const AgentBuilder = ({
   );
 };
 
-// Add function to generate custom instructions based on agent configuration
-const generateCustomInstructions = ({ personality, role, expertise }) => {
-  const instructions = [];
-
-  // Add personality-based instructions
-  instructions.push(`You are an AI assistant with the following personality traits:`);
-  if (personality.creativity < 33) {
-    instructions.push("- You prioritize practical, proven solutions and conventional approaches");
-  } else if (personality.creativity > 66) {
-    instructions.push("- You often suggest innovative and creative approaches");
-  } else {
-    instructions.push("- You balance practical solutions with creative thinking");
-  }
-  
-  // Add role-based instructions
-  instructions.push(`\nYour role is: ${role.type === 'custom' ? role.customRole : role.type}`);
-  
-  // Add expertise-based instructions
-  instructions.push(`\nExpertise level: ${expertise.level}`);
-  if (expertise.selectedSkills.length > 0) {
-    instructions.push(`Specialized in: ${expertise.selectedSkills.join(', ')}`);
-  }
-
-  return instructions.join('\n');
-};
-
 AgentBuilder.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
@@ -638,15 +606,22 @@ AgentBuilder.propTypes = {
     PropTypes.shape({
       id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
       name: PropTypes.string.isRequired,
+      type: PropTypes.string,
       role: PropTypes.shape({
         type: PropTypes.string,
+        customRole: PropTypes.string,
       }),
       personality: PropTypes.object,
       expertise: PropTypes.object,
       modelConfig: PropTypes.object,
     })
   ),
-  apiKeys: PropTypes.array,
+  apiKeys: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      name: PropTypes.string.isRequired,
+    })
+  ),
 };
 
 AgentBuilder.defaultProps = {

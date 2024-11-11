@@ -53,30 +53,35 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
   ];
 
   const onDragStart = (event, nodeType, agentData = null) => {
-    event.dataTransfer.setData('application/reactflow', JSON.stringify({
-      type: nodeType.type,
-      data: agentData || {
-        label: nodeType.label,
-        ...defaultAgentConfig
-      }
-    }));
-    event.dataTransfer.effectAllowed = 'move';
-
-    // Create a drag ghost
-    const ghost = document.createElement('div');
-    ghost.className = 'drag-ghost';
-    ghost.innerHTML = `
-      <span class="flex items-center gap-2">
-        ${nodeType.icon ? `<i class="text-gray-500"></i>` : ''}
-        <span>${nodeType.label}</span>
-      </span>
-    `;
-    document.body.appendChild(ghost);
-    event.dataTransfer.setDragImage(ghost, 0, 0);
+    let dragData;
     
-    setTimeout(() => {
-      document.body.removeChild(ghost);
-    }, 0);
+    if (agentData) {
+      // If dragging an existing agent from the palette
+      dragData = {
+        type: 'aiAgent',
+        data: {
+          ...agentData,
+          name: agentData.name,
+          type: 'ai',
+          // Don't include functions in drag data
+          onChange: undefined,
+          onCreateAgent: undefined
+        }
+      };
+    } else {
+      // If dragging a new node type
+      dragData = {
+        type: nodeType.type,
+        data: {
+          label: nodeType.label,
+          name: nodeType.label,
+          type: nodeType.type === 'aiAgent' ? 'ai' : nodeType.type
+        }
+      };
+    }
+  
+    event.dataTransfer.setData('application/reactflow', JSON.stringify(dragData));
+    event.dataTransfer.effectAllowed = 'move';
   };
 
   return (
@@ -118,7 +123,7 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
                   className="agent-item group"
                   draggable
                   onDragStart={(event) => onDragStart(event, {
-                    type: agent.type === 'ai' ? 'aiAgent' : 'humanAgent',
+                    type: 'aiAgent',
                     label: agent.name
                   }, agent)}
                 >
@@ -127,11 +132,7 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
                     className="w-full justify-start text-left text-sm py-1.5 px-2"
                   >
                     <Grip className="w-4 h-4 text-gray-400 mr-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    {agent.type === 'ai' ? (
-                      <Bot className="w-4 h-4 text-blue-500 mr-2" />
-                    ) : (
-                      <User className="w-4 h-4 text-green-500 mr-2" />
-                    )}
+                    <Bot className="w-4 h-4 text-blue-500 mr-2" />
                     <div>
                       <div className="font-medium">{agent.name}</div>
                       <div className="text-xs text-gray-500">

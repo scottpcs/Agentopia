@@ -1,9 +1,10 @@
 // src/App.jsx
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  addEdge,
-  useNodesState,
+import React, { useCallback, useRef, useState, useEffect } from 'react';
+import ReactFlow, { 
+  useNodesState, 
   useEdgesState,
+  useReactFlow,
+  addEdge
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -17,6 +18,7 @@ import CredentialManager from './components/CredentialManager';
 import AgentBuilder from './components/AgentBuilder';
 import ReactFlowWrapper from './components/ReactFlowWrapper';
 import { nodeTypes } from './components/nodeTypes';
+import { defaultAgentConfig } from './utils/agentConfigConverter';
 
 // Service imports
 import { callOpenAI } from './services/openaiService';
@@ -46,6 +48,7 @@ const App = () => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [draggedNode, setDraggedNode] = useState(null);
+  const [agentConfig, setAgentConfig] = useState(defaultAgentConfig);
 
   // State Declarations - Data Management
   const [agents, setAgents] = useState([]);
@@ -76,6 +79,21 @@ const App = () => {
     setShowAgentBuilder(true);
   }, []);
 
+  const handleAgentCreated = useCallback((newAgentConfig) => {
+    console.log('Creating new agent config:', newAgentConfig);
+    
+    // Add the agent to the agents list
+    setAgents((prevAgents) => [...prevAgents, newAgentConfig]);
+    
+    // Update the agent configuration
+    setAgentConfig(newAgentConfig);
+    
+    // Close the AgentBuilder modal
+    setShowAgentBuilder(false);
+  }, []);
+  
+
+  
   const handleSaveAgent = useCallback(async (agentConfig) => {
     console.log('Saving agent:', agentConfig);
     const newAgent = {
@@ -158,68 +176,82 @@ const App = () => {
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
-
-      // Check if we're dropping on a conversation node
-      const targetElement = event.target.closest('.conversation-node');
-      if (targetElement) {
-        // Let the conversation node handle the drop
+  
+      // Early return if no flow instance
+      if (!reactFlowInstance) {
+        console.warn('No React Flow instance');
         return;
       }
-
+  
+      // Get the target bounds
+      const targetBounds = reactFlowWrapper.current?.getBoundingClientRect();
+      if (!targetBounds) {
+        console.warn('No wrapper bounds');
+        return;
+      }
+  
+      // Calculate drop position
+      const dropPosition = {
+        x: event.clientX - targetBounds.left,
+        y: event.clientY - targetBounds.top,
+      };
+  
+      // Convert to flow coordinates
+      const flowPosition = reactFlowInstance.project({
+        x: dropPosition.x,
+        y: dropPosition.y,
+      });
+  
       try {
         const dragData = JSON.parse(event.dataTransfer.getData('application/reactflow'));
         
         if (!dragData || !dragData.type) {
-          console.warn('Invalid drop data');
+          console.warn('Invalid drag data');
           return;
         }
-
-        if (!reactFlowInstance) {
-          console.warn('Flow instance not available');
-          return;
-        }
-
-        const position = reactFlowInstance.screenToFlowPosition({
-          x: event.clientX,
-          y: event.clientY,
-        });
-
-        // Prepare the node data with all necessary configurations
-        const nodeData = {
-          ...dragData.data,
-          onChange: onNodeChange,
-          onCreateAgent: handleCreateAgent,
-          apiKeys: apiKeys,
-        };
-
-        if (dragData.type === 'aiAgent' || dragData.type === 'humanAgent') {
-          // If this is an agent being dropped, include agent-specific configurations
-          nodeData.model = nodeData.model || 'gpt-3.5-turbo';
-          nodeData.temperature = nodeData.temperature || 0.7;
-          nodeData.maxTokens = nodeData.maxTokens || 150;
-          nodeData.type = dragData.type === 'aiAgent' ? 'ai' : 'human';
-        }
-
+  
+        // Create the new node with calculated position
         const newNode = {
           id: `${dragData.type}-${Date.now()}`,
           type: dragData.type,
-          position,
-          data: nodeData,
+          position: flowPosition,
+          data: {
+            ...dragData.data,
+            onChange: onNodeChange,
+            onCreateAgent: handleCreateAgent,
+            apiKeys
+          }
         };
-
-        console.log('Creating new node:', {
+  
+        console.log('Adding new node:', {
           type: dragData.type,
-          config: nodeData
+          position: flowPosition,
+          data: dragData.data
         });
-
+  
         setNodes((nds) => nds.concat(newNode));
       } catch (error) {
         console.error('Error creating node:', error);
         setErrorMessage('Failed to create node: ' + error.message);
       }
     },
-    [reactFlowInstance, setNodes, onNodeChange, apiKeys, handleCreateAgent]
+    [reactFlowInstance, onNodeChange, handleCreateAgent, apiKeys]
   );
+  
+  // Add a fallback position helper
+  const getDefaultPosition = (dropPoint = null) => {
+    if (dropPoint) {
+      return dropPoint;
+    }
+    // Provide a default position if calculation fails
+    return { x: 100, y: 100 };
+  };
+  
+  // Update your onDragOver handler too
+  //const onDragOver = useCallback((event) => {
+  //  event.preventDefault();
+  //  event.dataTransfer.dropEffect = 'move';
+  //}, []);
 
   // Node Interaction Handlers
   const onNodeClick = useCallback((event, node) => {
@@ -421,48 +453,62 @@ const App = () => {
         />
         
         <div className="flow-container" ref={reactFlowWrapper}>
-        <ReactFlowWrapper
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onInit={onInit}
-          nodeTypes={nodeTypes}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-          onNodeClick={onNodeClick}
-          onNodeContextMenu={onNodeContextMenu}
-          onPaneClick={onBackgroundClick}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDrag={onNodeDrag}
-          onNodeDragStop={onNodeDragStop}
-          onNodesDelete={onNodesDelete} // Make sure this is also added
-        />
+          <ReactFlowWrapper
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onInit={onInit}
+            nodeTypes={nodeTypes}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            onNodeClick={onNodeClick}
+            onNodeContextMenu={onNodeContextMenu}
+            onPaneClick={onBackgroundClick}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDrag={onNodeDrag}
+            onNodeDragStop={onNodeDragStop}
+            onNodesDelete={onNodesDelete}
+          />
         </div>
-
-        {selectedNode && interactionMode === 'properties' && (
-          <PropertyPanel
-            node={selectedNode}
-            onChange={onNodeChange}
-            onClose={onPanelClose}
-            apiKeys={apiKeys}
-          />
-        )}
-
-        {selectedNode && interactionMode === 'interact' && (
-          <InteractionPanel
-            node={selectedNode}
-            onChange={onNodeChange}
-            onClose={onPanelClose}
-          />
-        )}
       </div>
+
+      {showAgentBuilder && (
+        <AgentBuilder
+          isOpen={showAgentBuilder}
+          onClose={() => setShowAgentBuilder(false)}
+          onSave={handleAgentCreated}
+          onUpdate={handleUpdateAgent}
+          onDelete={handleDeleteAgent}
+          agents={agents}
+          apiKeys={apiKeys}
+          initialConfig={agentConfig}
+        />
+      )}
+
+      {selectedNode && interactionMode === 'properties' && (
+        <PropertyPanel
+          node={selectedNode}
+          onChange={onNodeChange}
+          onClose={onPanelClose}
+          apiKeys={apiKeys}
+        />
+      )}
+
+      {selectedNode && interactionMode === 'interact' && (
+        <InteractionPanel
+          node={selectedNode}
+          onChange={onNodeChange}
+          onClose={onPanelClose}
+        />
+      )}
 
       {showWorkspaceManager && (
         <WorkspaceManager 
           onSetWorkspace={handleSetWorkspace}
           recentWorkspaces={recentWorkspaces}
+          onSelectRecentWorkspace={handleSetWorkspace}
           onClose={() => setShowWorkspaceManager(false)}
         />
       )}
@@ -470,18 +516,6 @@ const App = () => {
       {showCredentialManager && (
         <CredentialManager 
           onClose={() => setShowCredentialManager(false)}
-        />
-      )}
-
-      {showAgentBuilder && (
-        <AgentBuilder
-          isOpen={showAgentBuilder}
-          onClose={handleCloseAgentBuilder}
-          onSave={handleSaveAgent}
-          onUpdate={handleUpdateAgent}
-          onDelete={handleDeleteAgent}
-          agents={agents}
-          apiKeys={apiKeys}
         />
       )}
 
@@ -513,6 +547,16 @@ const App = () => {
         </div>
       )}
 
+      {/* Loading overlay */}
+      {isExecuting && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-4 rounded-lg shadow-lg">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+            <p className="mt-2 text-center">Executing Workflow...</p>
+          </div>
+        </div>
+      )}
+
       {/* Keyboard shortcuts helper */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-4 right-4 text-xs text-gray-500">
@@ -525,16 +569,6 @@ const App = () => {
               <li>Ctrl+Z: Undo</li>
               <li>Ctrl+Shift+Z: Redo</li>
             </ul>
-          </div>
-        </div>
-      )}
-
-      {/* Loading overlay */}
-      {isExecuting && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg shadow-lg">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-2 text-center">Executing Workflow...</p>
           </div>
         </div>
       )}
