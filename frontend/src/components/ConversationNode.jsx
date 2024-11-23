@@ -208,66 +208,120 @@ const ConversationNode = ({ id, data, isConnectable }) => {
   }, [inputMessage, isProcessing, messages, participants, conversationMode]);
 
   // Process agent responses
-  const processAgentResponse = async (agent, messageHistory) => {
+  const processAgent = async (agent, messageHistory) => {
     try {
       if (!agent.apiKeyId) {
         throw new Error(`No API key configured for agent: ${agent.name}`);
       }
-
-      const response = await fetch('http://localhost:3000/api/openai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKeyId: agent.apiKeyId,
-          model: agent.modelConfig?.model || 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: generateAgentInstructions(agent)
-            },
-            ...messageHistory.map(m => ({
-              role: m.role,
-              content: m.content
-            }))
-          ],
-          temperature: agent.modelConfig?.parameters?.temperature || 0.7,
-          maxTokens: agent.modelConfig?.parameters?.maxTokens || 2048
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || errorData.details || 'Failed to get agent response');
+  
+      // Get the appropriate instructions based on agent configuration
+      let systemInstructions;
+      if (agent.instructions?.isUsingCustom && agent.instructions?.custom) {
+        systemInstructions = agent.instructions.custom;
+      } else {
+        // Regenerate instructions from current configuration
+        // This ensures instructions stay in sync with any personality/role/expertise changes
+        const config = generateAgentConfiguration({
+          personality: agent.personality || {},
+          role: agent.role || {},
+          expertise: agent.expertise || {}
+        });
+        systemInstructions = config.systemPrompt;
       }
-
-      const data = await response.json();
-      const content = data.choices[0].message.content;
-
-      const agentMessage = {
-        id: Date.now(),
-        content,
-        sender: agent.name,
-        role: 'assistant',
-        timestamp: new Date().toISOString()
-      };
-
-      setMessages(prev => [...prev, agentMessage]);
-      return content;
+  
+      // Add conversation context
+      const conversationContext = `You are participating in a ${conversationMode} conversation with multiple agents.`;
+      const fullInstructions = `${systemInstructions}\n\n${conversationContext}`;
+  
+      const messages = [
+        {
+          role: 'system',
+          content: fullInstructions
+        },
+        ...messageHistory.map(m => ({
+          role: m.role,
+          content: m.content
+        }))
+      ];
+  
+      const response = await callOpenAI(
+        agent.apiKeyId,
+        agent.modelConfig?.model || 'gpt-4o',
+        messages,
+        agent.modelConfig?.parameters?.temperature || 0.7,
+        agent.modelConfig?.parameters?.maxTokens || 2048
+      );
+  
+      return response;
     } catch (error) {
       console.error(`Error processing agent ${agent.name}:`, error);
-      setError(`Error with agent ${agent.name}: ${error.message}`);
       throw error;
+    }
+  };
+  
+  // In AgentBuilder.jsx - ensure API key is included when creating new agents
+  const handleSave = async () => {
+    if (!validateName()) {
+      setActiveTab('info');
+      return;
+    }
+  
+    try {
+      setIsSaving(true);
+      
+      const agentConfig = {
+        id: selectedAgentId || `aiAgent-${Date.now()}`,
+        name: agentName.trim(),
+        type: 'aiAgent',
+        data: {
+          name: agentName.trim(),
+          type: 'ai',
+          personality,
+          role: {
+            ...role,
+            type: role.type === 'custom' ? role.customRole : role.type
+          },
+          expertise,
+          modelConfig: {
+            ...modelConfig,
+            model: modelConfig.model,
+            apiKeyId: modelConfig.apiKeyId, // Ensure API key is included
+            parameters: {
+              ...modelConfig.parameters
+            }
+          },
+          apiKeyId: modelConfig.apiKeyId // Also include at top level for compatibility
+        }
+      };
+  
+      console.log('Saving agent with configuration:', {
+        model: agentConfig.data.modelConfig.model,
+        apiKeyId: agentConfig.data.modelConfig.apiKeyId
+      });
+  
+      // Rest of the function...
+    } catch (error) {
+      console.error('Error saving agent:', error);
+      setNameError('Failed to save agent: ' + error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   // Generate instructions for agents
-  const generateAgentInstructions = useCallback((agent) => {
-    const baseInstructions = agent.instructions || 'You are a helpful assistant.';
-    const roleContext = `You are acting as ${getRoleDisplay(agent.role)}.`;
-    const conversationContext = `You are participating in a ${conversationMode} conversation with multiple agents.`;
-    
-    return `${baseInstructions}\n\n${roleContext}\n\n${conversationContext}`;
-  }, [conversationMode]);
+    const generateAgentInstructions = useCallback((agent) => {
+      // Get base system instructions
+      const baseInstructions = agent.systemInstructions || 'You are a helpful assistant.';
+      
+      // Add role context
+      const roleContext = `You are acting as ${getRoleDisplay(agent.role)}.`;
+      
+      // Add conversation mode context
+      const conversationContext = `You are participating in a ${conversationMode} conversation with multiple agents.`;
+      
+      // Combine all instructions
+      return `${baseInstructions}\n\n${roleContext}\n\n${conversationContext}`;
+    }, [conversationMode]);
 
   // Handle key press events
   const handleKeyPress = useCallback((e) => {

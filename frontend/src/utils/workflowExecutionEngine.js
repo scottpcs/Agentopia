@@ -1,7 +1,34 @@
+// src/utils/workflowExecutionEngine.js
 import { callOpenAI } from '../services/openaiService';
 import { generateAgentConfiguration } from '../utils/agentConfigConverter';
 
 let isExecutionStopped = false;
+
+// Helper function to generate agent instructions
+const generateAgentInstructions = (agentData, conversationMode = null) => {
+  // Get base system instructions
+  const baseInstructions = agentData.instructions?.isUsingCustom && agentData.instructions?.custom
+    ? agentData.instructions.custom
+    : generateAgentConfiguration({
+        personality: agentData.personality || {},
+        role: agentData.role || {},
+        expertise: agentData.expertise || {}
+      }).systemPrompt;
+
+  // Add role context
+  const roleContext = `You are acting as ${agentData.role?.type || 'an assistant'}.`;
+  
+  // Add conversation mode context if applicable
+  const conversationContext = conversationMode 
+    ? `\nYou are participating in a ${conversationMode} conversation with multiple agents.` 
+    : '';
+  
+  // Add any custom context or modifiers
+  const customContext = agentData.instructions?.additionalContext || '';
+  
+  // Combine all instructions
+  return `${baseInstructions}\n\n${roleContext}${conversationContext}${customContext ? '\n\n' + customContext : ''}`;
+};
 
 export const executeWorkflow = async (nodes, edges, onNodeChange) => {
   console.log('Starting workflow execution');
@@ -43,7 +70,6 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
         }
       }
       
-      // If no priority nodes found, use the first node without incoming edges
       console.log('Using first node without incoming edges:', nodesWithoutIncoming[0]);
       return nodesWithoutIncoming[0];
     }
@@ -67,6 +93,44 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
     return nodes[0];
   };
 
+  const processModeratorDecision = async (moderator, input, availableAgents) => {
+    const apiKeyId = moderator.apiKeyId || moderator.modelConfig?.apiKeyId;
+    if (!apiKeyId) {
+      throw new Error(`No API key configured for moderator: ${moderator.name}`);
+    }
+
+    const systemInstructions = generateAgentInstructions(moderator);
+
+    try {
+      const response = await callOpenAI(
+        apiKeyId,
+        moderator.modelConfig?.model || 'gpt-3.5-turbo',
+        [
+          {
+            role: 'system',
+            content: `${systemInstructions}\nAs a conversation moderator, review the context and decide which agents should respond. Available agents: ${availableAgents.map(a => `${a.id} (${a.role?.type || 'Unknown Role'})`).join(', ')}. Respond with a JSON array of agent IDs that should participate.`
+          },
+          {
+            role: 'user',
+            content: input
+          }
+        ],
+        0.3, // Lower temperature for more consistent moderation
+        100  // Short response needed
+      );
+
+      try {
+        return JSON.parse(response);
+      } catch (error) {
+        console.warn('Failed to parse moderator response:', response);
+        return [];
+      }
+    } catch (error) {
+      console.error('Error in moderator decision:', error);
+      return [];
+    }
+  };
+
   const processNode = async (nodeId, input = '', visited = new Set()) => {
     if (isExecutionStopped) {
       console.log('Workflow execution stopped');
@@ -86,113 +150,90 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
       return null;
     }
 
-    console.log(`Processing node: ${nodeId}, type: ${node.type}`);
+    console.log(`Processing node: ${nodeId}, type: ${node.type}`, {
+      nodeId,
+      type: node.type,
+      apiKeyId: node.data?.apiKeyId,
+      modelConfig: node.data?.modelConfig
+    });
+
     let output = '';
 
     try {
       switch (node.type) {
+        // In workflowExecutionEngine.js - Update the AI agent case
         case 'aiAgent': {
-          console.log('Processing AI Agent node:', {
-            nodeId,
-            model: node.data.modelConfig?.model,
-            apiKeyId: node.data.apiKeyId
-          });
-
-          if (!node.data.apiKeyId) {
-            throw new Error(`No API key configured for AI Agent: ${node.data.name || nodeId}`);
-          }
-
-          const agentConfig = generateAgentConfiguration({
-            personality: node.data.personality || {},
-            role: node.data.role || {},
-            expertise: node.data.expertise || {}
-          });
-
-          const messages = [
-            { 
-              role: 'system', 
-              content: agentConfig.systemPrompt 
-            },
-            { 
-              role: 'user', 
-              content: input 
+          try {
+            const apiKeyId = node.data?.apiKeyId || node.data?.modelConfig?.apiKeyId;
+            if (!apiKeyId) {
+              throw new Error(`No API key configured for AI Agent: ${node.data?.name || nodeId}`);
             }
-          ];
 
-          output = await callOpenAI(
-            node.data.apiKeyId,
-            node.data.modelConfig?.model || 'gpt-4o',
-            messages,
-            node.data.modelConfig?.parameters?.temperature || agentConfig.modelSettings.temperature,
-            node.data.modelConfig?.parameters?.maxTokens || agentConfig.modelSettings.maxTokens,
-            node.data.instructions
-          );
-          
-          onNodeChange(nodeId, { 
-            lastOutput: output,
-            lastInput: input,
-            context: messages.concat([{ role: 'assistant', content: output }])
-          });
+            const systemInstructions = generateAgentInstructions(node.data);
+
+            console.log('Making API call for AI agent:', {
+              nodeId,
+              apiKeyId,
+              model: node.data?.modelConfig?.model,
+            });
+
+            // No need for separate timeout promise as it's handled by axios on the server
+            output = await callOpenAI(
+              apiKeyId,
+              node.data?.modelConfig?.model || 'gpt-4o',
+              [
+                { 
+                  role: 'system', 
+                  content: systemInstructions
+                },
+                { 
+                  role: 'user', 
+                  content: input 
+                }
+              ],
+              node.data?.modelConfig?.parameters?.temperature || 0.7,
+              node.data?.modelConfig?.parameters?.maxTokens || 2048
+            );
+
+            console.log('Received API response for AI agent:', {
+              nodeId,
+              outputLength: output?.length
+            });
+
+            onNodeChange(nodeId, { 
+              lastOutput: output,
+              lastInput: input,
+              status: 'completed'
+            });
+          } catch (error) {
+            console.error(`Error in AI agent processing:`, error);
+            const errorMessage = error.message.includes('timeout')
+              ? 'The AI model took too long to respond. Please try again.'
+              : error.message;
+            
+            onNodeChange(nodeId, { 
+              error: errorMessage,
+              status: 'error'
+            });
+            throw new Error(errorMessage);
+          }
           break;
         }
-
-        case 'humanInteraction':
-          console.log('Processing Human Interaction node:', node);
-          onNodeChange(nodeId, { 
-            waitingForInput: true, 
-            lastInput: input,
-            resolveInput: null
-          });
-
-          output = await new Promise((resolve) => {
-            onNodeChange(nodeId, {
-              waitingForInput: true,
-              lastInput: input,
-              resolveInput: (humanInput) => {
-                console.log(`Received human input for node ${nodeId}:`, humanInput);
-                onNodeChange(nodeId, {
-                  waitingForInput: false,
-                  lastOutput: humanInput,
-                  resolveInput: null
-                });
-                resolve(humanInput);
-              }
-            });
-          });
-          break;
-
-        case 'textInput':
-          console.log('Processing Text Input node:', node);
-          output = node.data.inputText || input;
-          onNodeChange(nodeId, { 
-            lastInput: input,
-            lastOutput: output
-          });
-          break;
-
-        case 'textOutput':
-          console.log('Processing Text Output node:', node);
-          output = input;
-          onNodeChange(nodeId, { 
-            text: input,
-            lastOutput: input
-          });
-          break;
 
         case 'conversation': {
           console.log('Processing Conversation node:', {
             nodeId,
-            mode: node.data.mode,
-            agents: node.data.agents?.length,
-            apiKeyId: node.data.apiKeyId
+            mode: node.data?.mode,
+            agents: node.data?.agents?.length
           });
 
-          if (!node.data.agents || node.data.agents.length === 0) {
+          if (!node.data?.agents || node.data.agents.length === 0) {
             throw new Error('No agents configured for conversation node');
           }
 
-          // Validate API keys for all agents
-          const missingApiKeys = node.data.agents.filter(agent => !agent.apiKeyId);
+          // Validate API keys for all AI agents
+          const aiAgents = node.data.agents.filter(agent => agent.type === 'ai');
+          const missingApiKeys = aiAgents.filter(agent => !agent.apiKeyId && !agent.modelConfig?.apiKeyId);
           if (missingApiKeys.length > 0) {
             throw new Error(`Missing API keys for agents: ${missingApiKeys.map(a => a.name || a.id).join(', ')}`);
           }
@@ -201,27 +242,28 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
           
           switch (node.data.mode) {
             case 'round-robin':
-              for (const agent of node.data.agents) {
-                const agentResponse = await processAgent(agent, input, conversationOutput);
+              for (const agent of aiAgents) {
+                const apiKeyId = agent.apiKeyId || agent.modelConfig?.apiKeyId;
+                if (!apiKeyId) continue;
+                const agentResponse = await processAgent(agent, input, conversationOutput, node.data.mode);
                 conversationOutput.push(agentResponse);
               }
               break;
 
             case 'moderated':
-              if (node.data.agents.length > 0) {
-                const moderator = node.data.agents[0];
-                if (!moderator.apiKeyId) {
+              if (aiAgents.length > 0) {
+                const moderator = aiAgents[0];
+                const moderatorApiKeyId = moderator.apiKeyId || moderator.modelConfig?.apiKeyId;
+                if (!moderatorApiKeyId) {
                   throw new Error('Moderator agent requires an API key');
                 }
-                const participants = await getParticipantsFromModerator(
-                  moderator, 
-                  input,
-                  node.data.agents
-                );
+                const participants = await processModeratorDecision(moderator, input, node.data.agents);
                 for (const participantId of participants) {
                   const agent = node.data.agents.find(a => a.id === participantId);
                   if (agent) {
-                    const agentResponse = await processAgent(agent, input, conversationOutput);
+                    const agentApiKeyId = agent.apiKeyId || agent.modelConfig?.apiKeyId;
+                    if (!agentApiKeyId) continue;
+                    const agentResponse = await processAgent(agent, input, conversationOutput, node.data.mode);
                     conversationOutput.push(agentResponse);
                   }
                 }
@@ -230,11 +272,10 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
 
             case 'free-form':
             default:
-              await Promise.all(node.data.agents.map(async agent => {
-                if (!agent.apiKeyId) {
-                  throw new Error(`Agent ${agent.name || agent.id} requires an API key`);
-                }
-                const agentResponse = await processAgent(agent, input, conversationOutput);
+              await Promise.all(aiAgents.map(async agent => {
+                const apiKeyId = agent.apiKeyId || agent.modelConfig?.apiKeyId;
+                if (!apiKeyId) return;
+                const agentResponse = await processAgent(agent, input, conversationOutput, node.data.mode);
                 conversationOutput.push(agentResponse);
               }));
               break;
@@ -251,14 +292,81 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
                 role: 'assistant',
                 content: response
               }))
-            ]
+            ],
+            status: 'completed'
+          });
+          break;
+        }
+
+        case 'humanInteraction':
+          console.log('Processing Human Interaction node:', node);
+          onNodeChange(nodeId, { 
+            waitingForInput: true, 
+            lastInput: input,
+            resolveInput: null,
+            status: 'waiting'
+          });
+
+          output = await new Promise((resolve) => {
+            onNodeChange(nodeId, {
+              waitingForInput: true,
+              lastInput: input,
+              resolveInput: (humanInput) => {
+                console.log(`Received human input for node ${nodeId}:`, humanInput);
+                onNodeChange(nodeId, {
+                  waitingForInput: false,
+                  lastOutput: humanInput,
+                  resolveInput: null,
+                  status: 'completed'
+                });
+                resolve(humanInput);
+              }
+            });
+          });
+          break;
+
+        case 'textInput':
+          console.log('Processing Text Input node:', node);
+          output = node.data?.inputText || input;
+          onNodeChange(nodeId, { 
+            lastInput: input,
+            lastOutput: output,
+            status: 'completed'
+          });
+          break;
+
+        case 'textOutput':
+          console.log('Processing Text Output node:', node);
+          output = input;
+          onNodeChange(nodeId, { 
+            text: input,
+            lastOutput: input,
+            status: 'completed'
+          });
+          break;
+
+        case 'contextProcessor': {
+          console.log('Processing Context Processor node:', node);
+          const contextInput = node.data?.contextInput || [];
+          const contextOutput = await processContext(contextInput, node.data?.processingRules);
+          output = contextOutput;
+          onNodeChange(nodeId, {
+            lastInput: input,
+            lastOutput: output,
+            contextOutput,
+            status: 'completed'
           });
           break;
         }
 
         default:
-          console.warn(`Using default handling for node type: ${node.type}`);
+          console.log(`Using default handling for node type: ${node.type}`);
           output = input;
+          onNodeChange(nodeId, {
+            lastInput: input,
+            lastOutput: output,
+            status: 'completed'
+          });
       }
 
       // Process next nodes
@@ -282,78 +390,83 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
     }
   };
 
-  const processAgent = async (agent, input, conversationHistory) => {
+  const processAgent = async (agent, input, conversationHistory, conversationMode) => {
     console.log('Processing agent:', {
       agentId: agent.id,
       name: agent.name,
-      apiKeyId: agent.apiKeyId,
+      apiKeyId: agent.apiKeyId || agent.modelConfig?.apiKeyId,
       model: agent.modelConfig?.model
     });
 
-    if (!agent.apiKeyId) {
-      throw new Error(`No API key configured for agent: ${agent.name}`);
-    }
-
-    const agentConfig = generateAgentConfiguration({
-      personality: agent.personality || {},
-      role: agent.role || {},
-      expertise: agent.expertise || {}
-    });
-
-    const messages = [
-      {
-        role: 'system',
-        content: agentConfig.systemPrompt
-      },
-      ...conversationHistory.map(msg => ({
-        role: 'assistant',
-        content: msg
-      })),
-      {
-        role: 'user',
-        content: input
+    try {
+      const apiKeyId = agent.apiKeyId || agent.modelConfig?.apiKeyId;
+      if (!apiKeyId) {
+        throw new Error(`No API key configured for agent: ${agent.name}`);
       }
-    ];
 
-    return await callOpenAI(
-      agent.apiKeyId,
-      agent.modelConfig?.model || 'gpt-4o',
-      messages,
-      agent.modelConfig?.parameters?.temperature || agentConfig.modelSettings.temperature,
-      agent.modelConfig?.parameters?.maxTokens || agentConfig.modelSettings.maxTokens,
-      agent.instructions
-    );
-  };
+      const systemInstructions = generateAgentInstructions(agent, conversationMode);
 
-  const getParticipantsFromModerator = async (moderator, input, availableAgents) => {
-    const moderatorConfig = generateAgentConfiguration({
-      personality: moderator.personality || {},
-      role: moderator.role || {},
-      expertise: moderator.expertise || {}
-    });
-
-    const response = await callOpenAI(
-      moderator.apiKeyId,
-      moderator.modelConfig?.model || 'gpt-4o',
-      [
+      const messages = [
         {
           role: 'system',
-          content: `${moderatorConfig.systemPrompt}\n\nYou are the moderator of this conversation. Review the context and decide which agents should respond. Available agents: ${availableAgents.map(a => `${a.id} (${a.role?.type || 'Unknown Role'})`).join(', ')}\n\nRespond with a JSON array of agent IDs that should participate.`
+          content: systemInstructions
         },
+        ...conversationHistory.map(msg => ({
+          role: 'assistant',
+          content: msg
+        })),
         {
           role: 'user',
           content: input
         }
-      ],
-      0.3, // Lower temperature for more consistent moderation
-      100  // Short response needed
-    );
+      ];
 
-    try {
-      return JSON.parse(response);
+      return await callOpenAI(
+        apiKeyId,
+        agent.modelConfig?.model || 'gpt-4o',
+        messages,
+        agent.modelConfig?.parameters?.temperature || 0.7,
+        agent.modelConfig?.parameters?.maxTokens || 2048
+      );
     } catch (error) {
-      console.warn('Failed to parse moderator response:', response);
-      return [];
+      console.error(`Error processing agent ${agent.name}:`, error);
+      throw error;
+    }
+  };
+
+  const processContext = async (contextInput, processingRules = []) => {
+    // Implementation of context processing logic
+    // This could include summarization, filtering, transformation, etc.
+    try {
+      if (!Array.isArray(contextInput)) {
+        console.warn('Context input is not an array, returning as is');
+        return contextInput;
+      }
+
+      let processedContext = [...contextInput];
+
+      // Apply any processing rules
+      for (const rule of processingRules) {
+        switch (rule.type) {
+          case 'filter':
+            processedContext = processedContext.filter(rule.condition);
+            break;
+          case 'transform':
+            processedContext = processedContext.map(rule.transform);
+            break;
+          case 'summarize':
+            // If a summarization rule exists, we might want to call an AI model
+            // to generate a summary of the context
+            break;
+          default:
+            console.warn(`Unknown processing rule type: ${rule.type}`);
+        }
+      }
+
+      return processedContext;
+    } catch (error) {
+      console.error('Error processing context:', error);
+      return contextInput;
     }
   };
 
@@ -363,10 +476,143 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
   }
 
   console.log(`Starting workflow with node: ${startNode.id}`);
-  await processNode(startNode.id, '', new Set());
+  try {
+    const result = await processNode(startNode.id, '', new Set());
+    console.log('Workflow execution completed successfully');
+    return result;
+  } catch (error) {
+    console.error('Workflow execution failed:', error);
+    throw error;
+  } finally {
+    // Reset execution state
+    isExecutionStopped = false;
+  }
 };
 
 export const stopWorkflowExecution = () => {
   console.log('Stopping workflow execution');
   isExecutionStopped = true;
+};
+
+// Helper function to validate node configuration
+export const validateNodeConfiguration = (node) => {
+  if (!node) return false;
+
+  switch (node.type) {
+    case 'aiAgent':
+      return !!(node.data?.modelConfig?.model && 
+                (node.data?.apiKeyId || node.data?.modelConfig?.apiKeyId));
+    
+    case 'humanInteraction':
+      return true; // Human interaction nodes don't require special configuration
+    
+    case 'textInput':
+      return true; // Text input nodes are always valid
+    
+    case 'textOutput':
+      return true; // Text output nodes are always valid
+    
+    case 'contextProcessor':
+      return true; // Context processor nodes don't require special configuration
+    
+    case 'conversation':
+      if (!node.data?.agents || node.data.agents.length === 0) return false;
+      // Check if all AI agents have required configuration
+      return node.data.agents
+        .filter(agent => agent.type === 'ai')
+        .every(agent => !!(agent.apiKeyId || agent.modelConfig?.apiKeyId));
+    
+    default:
+      return false;
+  }
+};
+
+// Helper function to get node status
+export const getNodeStatus = (node) => {
+  if (!node?.data) return 'unknown';
+
+  if (node.data.error) return 'error';
+  if (node.data.status) return node.data.status;
+  if (node.data.waitingForInput) return 'waiting';
+  if (node.data.lastOutput !== undefined) return 'completed';
+  
+  return 'pending';
+};
+
+// Helper function to check if a workflow is valid
+export const validateWorkflow = (nodes, edges) => {
+  if (!nodes.length) return { valid: false, error: 'Workflow has no nodes' };
+  
+  // Check for invalid node configurations
+  const invalidNodes = nodes.filter(node => !validateNodeConfiguration(node));
+  if (invalidNodes.length > 0) {
+    return { 
+      valid: false, 
+      error: `Invalid node configurations: ${invalidNodes.map(n => n.id).join(', ')}` 
+    };
+  }
+
+  // Check for circular dependencies
+  const visited = new Set();
+  const recursionStack = new Set();
+
+  const hasCycle = (nodeId) => {
+    visited.add(nodeId);
+    recursionStack.add(nodeId);
+
+    const outgoingEdges = edges.filter(e => e.source === nodeId);
+    for (const edge of outgoingEdges) {
+      if (!visited.has(edge.target)) {
+        if (hasCycle(edge.target)) return true;
+      } else if (recursionStack.has(edge.target)) {
+        return true;
+      }
+    }
+
+    recursionStack.delete(nodeId);
+    return false;
+  };
+
+  const startNodes = nodes.filter(node => 
+    !edges.some(edge => edge.target === node.id)
+  );
+
+  for (const startNode of startNodes) {
+    if (hasCycle(startNode.id)) {
+      return { valid: false, error: 'Workflow contains circular dependencies' };
+    }
+  }
+
+  // Check for disconnected nodes
+  const connectedNodes = new Set();
+  const addConnectedNodes = (nodeId) => {
+    connectedNodes.add(nodeId);
+    edges
+      .filter(e => e.source === nodeId)
+      .forEach(e => {
+        if (!connectedNodes.has(e.target)) {
+          addConnectedNodes(e.target);
+        }
+      });
+  };
+
+  startNodes.forEach(node => addConnectedNodes(node.id));
+  const disconnectedNodes = nodes.filter(node => !connectedNodes.has(node.id));
+
+  if (disconnectedNodes.length > 0) {
+    return { 
+      valid: false, 
+      error: `Disconnected nodes found: ${disconnectedNodes.map(n => n.id).join(', ')}` 
+    };
+  }
+
+  return { valid: true };
+};
+
+export default {
+  executeWorkflow,
+  stopWorkflowExecution,
+  validateNodeConfiguration,
+  getNodeStatus,
+  validateWorkflow
 };

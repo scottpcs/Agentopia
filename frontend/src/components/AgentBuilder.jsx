@@ -3,13 +3,35 @@ import PropTypes from 'prop-types';
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Cross2Icon } from '@radix-ui/react-icons';
-import { Bot, User, Grip } from 'lucide-react';
+import { 
+  Settings2, 
+  MessageCircle, 
+  Users, 
+  ChevronDown, 
+  ChevronUp,
+  Bot,
+  User,
+  Loader,
+  AlertCircle,  // Added this import
+  X,
+  Plus,
+  Grip
+} from 'lucide-react';
 import { MODEL_CONFIGS } from '../utils/modelConfigUtils';
 import { validateModelConfig } from '../utils/modelConfigUtils';
 import { generateAgentConfiguration } from '../utils/agentConfigConverter';
 import ModelConfig from './ModelConfig';
+
+const MODEL_OPTIONS = [
+  { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o mini', description: 'Affordable and intelligent small model for fast, lightweight tasks' },
+  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'The latest GPT-4 Turbo model with vision capabilities' },
+  { value: 'gpt-4', label: 'GPT-4', description: 'Powerful model for complex tasks, 8k context window' },
+  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Fast, inexpensive model for many tasks' },
+  { value: 'gpt-3.5-turbo-16k', label: 'GPT-3.5 Turbo 16k', description: 'GPT-3.5 Turbo with extended 16k token context' }
+];
 
 // Personality trait definitions
 const PERSONALITY_TRAITS = [
@@ -145,6 +167,11 @@ const AgentBuilder = ({
   const [nameError, setNameError] = useState('');
   const [activeTab, setActiveTab] = useState('personality');
   const [isSaving, setIsSaving] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [systemInstructions, setSystemInstructions] = useState('');
+  const [modelError, setModelError] = useState('');
+  const [generatedInstructions, setGeneratedInstructions] = useState('');
+  const [isUsingCustomInstructions, setIsUsingCustomInstructions] = useState(false);
 
   // Configuration states
   const [personality, setPersonality] = useState(initialAgentState.personality);
@@ -166,6 +193,55 @@ const AgentBuilder = ({
     }
   }, [selectedAgentId, agents]);
 
+  useEffect(() => {
+    if (activeTab === 'model') {  // Only generate when model tab is active
+      const config = generateAgentConfiguration({
+        personality,
+        role,
+        expertise
+      });
+      
+      setGeneratedInstructions(config.systemPrompt);
+      
+      if (!isUsingCustomInstructions) {
+        setCustomInstructions(config.systemPrompt);
+      }
+    }
+  }, [personality, role, expertise, activeTab, isUsingCustomInstructions]);
+
+  const validateModelConfig = (config) => {
+    if (!config.apiKeyId) {
+      setModelError('API key is required');
+      return false;
+    }
+    if (!config.model) {
+      setModelError('Model selection is required');
+      return false;
+    }
+    
+    const modelLimits = MODEL_CONFIGS[config.model];
+    if (!modelLimits) {
+      setModelError('Invalid model selected');
+      return false;
+    }
+
+    if (config.parameters) {
+      const { temperature, maxTokens } = config.parameters;
+      if (temperature < modelLimits.temperatureRange.min || 
+          temperature > modelLimits.temperatureRange.max) {
+        setModelError(`Temperature must be between ${modelLimits.temperatureRange.min} and ${modelLimits.temperatureRange.max}`);
+        return false;
+      }
+      if (maxTokens <= 0 || maxTokens > modelLimits.maxTokens) {
+        setModelError(`Max tokens must be between 1 and ${modelLimits.maxTokens}`);
+        return false;
+      }
+    }
+
+    setModelError('');
+    return true;
+  };
+
   // Reset form to initial state
   const resetForm = () => {
     setAgentName('');
@@ -173,6 +249,9 @@ const AgentBuilder = ({
     setRole(initialAgentState.role);
     setExpertise(initialAgentState.expertise);
     setModelConfig(initialAgentState.modelConfig);
+    setGeneratedInstructions('');
+    setCustomInstructions('');
+    setIsUsingCustomInstructions(false);
     setNameError('');
   };
 
@@ -212,55 +291,68 @@ const AgentBuilder = ({
     return true;
   };
 
-  // Handle saving agent
-  const handleSave = async () => {
-    if (!validateName()) {
+  // Validate before saving
+  const validateForm = () => {
+    if (!agentName.trim()) {
+      setNameError('Agent name is required');
       setActiveTab('info');
-      return;
+      return false;
     }
 
+    if (!modelConfig.apiKeyId) {
+      setNameError('API key is required');
+      setActiveTab('model');
+      return false;
+    }
+
+    if (!modelConfig.model) {
+      setNameError('Model selection is required');
+      setActiveTab('model');
+      return false;
+    }
+
+    return true;
+  };
+
+  // Handle saving agent
+  const handleSave = async () => {
     try {
+      if (!validateForm()) {
+        return;
+      }
+
       setIsSaving(true);
       
-      // Create the agent configuration with explicit AI type
       const agentConfig = {
-        id: selectedAgentId || `aiAgent-${Date.now()}`,
+        id: selectedAgentId || `agent-${Date.now()}`,
         name: agentName.trim(),
-        type: 'aiAgent', // Explicitly set node type for React Flow
+        type: 'aiAgent',
         data: {
           name: agentName.trim(),
-          type: 'ai', // Internal type for agent behavior
+          type: 'ai',
           personality,
           role: {
             ...role,
             type: role.type === 'custom' ? role.customRole : role.type
           },
           expertise,
-          modelConfig: validateModelConfig(
-            modelConfig.model,
-            modelConfig.parameters.temperature,
-            modelConfig.parameters.maxTokens
-          ),
-          // Required AI agent properties
-          apiKeyId: modelConfig.apiKeyId,
-          model: modelConfig.model,
-          temperature: modelConfig.parameters.temperature,
-          maxTokens: modelConfig.parameters.maxTokens,
-          onChange: undefined // Will be set by the node on render
+          modelConfig: {
+            ...modelConfig,
+            model: modelConfig.model,
+            apiKeyId: modelConfig.apiKeyId,
+            parameters: {
+              ...modelConfig.parameters,
+              temperature: modelConfig.parameters?.temperature || 0.7,
+              maxTokens: modelConfig.parameters?.maxTokens || 2048
+            }
+          },
+          instructions: {
+            generated: generatedInstructions,
+            custom: isUsingCustomInstructions ? customInstructions : null,
+            isUsingCustom: isUsingCustomInstructions
+          }
         }
       };
-
-      // Generate system instructions
-      const systemConfig = generateAgentConfiguration({
-        personality,
-        role,
-        expertise
-      });
-
-      agentConfig.data.instructions = systemConfig.systemPrompt;
-      agentConfig.data.modelSettings = systemConfig.modelSettings;
-
-      console.log('Saving AI agent with configuration:', agentConfig);
 
       if (isCreatingNew) {
         await onSave(agentConfig);
@@ -271,7 +363,7 @@ const AgentBuilder = ({
       onClose();
     } catch (error) {
       console.error('Error saving agent:', error);
-      setNameError('Failed to save agent: ' + error.message);
+      setNameError(`Failed to save agent: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -419,20 +511,163 @@ const AgentBuilder = ({
           </div>
         );
 
-      case 'model':
-        return (
-          <ModelConfig
-            config={modelConfig}
-            onChange={setModelConfig}
-            apiKeys={apiKeys}
-            systemInstructions={generateAgentConfiguration({
-              personality,
-              role,
-              expertise
-            }).systemPrompt}
-            error={nameError}
-          />
-        );
+        case 'model':
+          return (
+            <div className="space-y-6">
+              <div>
+                <Label>Model Selection</Label>
+                <select
+                  value={modelConfig.model || 'gpt-4o-mini'}
+                  onChange={(e) => setModelConfig(prev => ({
+                    ...prev,
+                    model: e.target.value
+                  }))}
+                  className="w-full mt-1 p-2 border rounded-md"
+                >
+                  {MODEL_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label} - {option.description}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-sm text-gray-500 mt-1">
+                  {MODEL_OPTIONS.find(m => m.value === modelConfig.model)?.description}
+                </p>
+              </div>
+  
+              <div>
+                <Label>API Key</Label>
+                <select
+                  value={modelConfig.apiKeyId || ''}
+                  onChange={(e) => setModelConfig(prev => ({
+                    ...prev,
+                    apiKeyId: e.target.value
+                  }))}
+                  className="w-full mt-1 p-2 border rounded-md"
+                >
+                  <option value="">Select API Key</option>
+                  {apiKeys.map(key => (
+                    <option key={key.id} value={key.name}>
+                      {key.name}
+                    </option>
+                  ))}
+                </select>
+                {!modelConfig.apiKeyId && (
+                  <p className="text-sm text-amber-600 mt-1.5 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    API key required for model usage
+                  </p>
+                )}
+              </div>
+  
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Model Parameters</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <div className="flex justify-between">
+                      <Label>Temperature</Label>
+                      <span className="text-sm text-gray-500">
+                        {modelConfig.parameters?.temperature?.toFixed(2) || '0.70'}
+                      </span>
+                    </div>
+                    <Input
+                      type="range"
+                      min={0}
+                      max={2}
+                      step="0.1"
+                      value={modelConfig.parameters?.temperature || 0.7}
+                      onChange={(e) => setModelConfig(prev => ({
+                        ...prev,
+                        parameters: {
+                          ...prev.parameters,
+                          temperature: parseFloat(e.target.value)
+                        }
+                      }))}
+                      className="mt-1.5"
+                    />
+                  </div>
+  
+                  <div>
+                    <div className="flex justify-between">
+                      <Label>Max Tokens</Label>
+                      <span className="text-sm text-gray-500">
+                        {modelConfig.parameters?.maxTokens || '2048'}
+                      </span>
+                    </div>
+                    <Input
+                      type="number"
+                      min="1"
+                      max={MODEL_CONFIGS[modelConfig.model || 'gpt-4o-mini']?.maxTokens || 4096}
+                      value={modelConfig.parameters?.maxTokens || 2048}
+                      onChange={(e) => setModelConfig(prev => ({
+                        ...prev,
+                        parameters: {
+                          ...prev.parameters,
+                          maxTokens: parseInt(e.target.value)
+                        }
+                      }))}
+                      className="mt-1.5"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+  
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Instructions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <Label>Generated Instructions</Label>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setCustomInstructions(generatedInstructions);
+                          setIsUsingCustomInstructions(false);
+                        }}
+                        disabled={!isUsingCustomInstructions}
+                      >
+                        Reset to Generated
+                      </Button>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg text-sm whitespace-pre-wrap border border-gray-200">
+                      {generatedInstructions}
+                    </div>
+                  </div>
+  
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <Label>Custom Instructions</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="useCustom" className="text-sm">Use Custom</Label>
+                        <input
+                          type="checkbox"
+                          id="useCustom"
+                          checked={isUsingCustomInstructions}
+                          onChange={(e) => setIsUsingCustomInstructions(e.target.checked)}
+                          className="rounded border-gray-300"
+                        />
+                      </div>
+                    </div>
+                    <textarea
+                      value={customInstructions}
+                      onChange={(e) => {
+                        setCustomInstructions(e.target.value);
+                        setIsUsingCustomInstructions(true);
+                      }}
+                      placeholder="Modify instructions or use generated ones..."
+                      className="w-full h-48 p-2 text-sm border rounded-md"
+                      disabled={!isUsingCustomInstructions}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          );
 
       default:
         return null;
@@ -494,7 +729,7 @@ const AgentBuilder = ({
                 ))}
               </div>
             </div>
-
+  
             {/* Main content area */}
             <div className="flex-1 flex flex-col max-h-[90vh]">
               <div className="p-6 border-b border-gray-200">
@@ -510,7 +745,7 @@ const AgentBuilder = ({
                     <Cross2Icon className="h-4 w-4" />
                   </Button>
                 </div>
-
+  
                 {/* Agent name input */}
                 <div className="mb-6">
                   <Label htmlFor="agentName">Agent Name</Label>
@@ -525,7 +760,7 @@ const AgentBuilder = ({
                     <p className="text-red-500 text-sm mt-1">{nameError}</p>
                   )}
                 </div>
-
+  
                 {/* Configuration tabs */}
                 <div className="flex gap-2 mb-4 border-b border-gray-200">
                   {['personality', 'role', 'expertise', 'model'].map(tab => (
@@ -543,12 +778,12 @@ const AgentBuilder = ({
                   ))}
                 </div>
               </div>
-
+  
               {/* Tab content */}
               <div className="flex-1 overflow-y-auto p-6">
                 {renderTabContent()}
               </div>
-
+  
               {/* Footer with action buttons */}
               <div className="p-6 border-t border-gray-200 bg-gray-50">
                 <div className="flex justify-between">

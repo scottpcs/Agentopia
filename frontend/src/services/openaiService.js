@@ -1,15 +1,15 @@
+// src/services/openaiService.js
+
 /**
  * Makes a call to the OpenAI API with properly formatted agent configurations
- * @param {string} apiKeyName - Name of the API key to use
- * @param {string} model - The model to use (e.g., 'gpt-4o', 'gpt-4o-mini')
- * @param {Array} messages - Array of message objects
- * @param {number} temperature - Model temperature setting
- * @param {number} maxTokens - Maximum tokens to generate
- * @param {Object} customInstructions - Additional custom instructions
- * @returns {Promise<string>} The model's response
  */
-export async function callOpenAI(apiKeyName, model, messages, temperature, maxTokens, customInstructions) {
+async function callOpenAI(apiKeyId, model, messages, temperature, maxTokens, customInstructions) {
+  if (!apiKeyId) {
+    throw new Error('API key name is required');
+  }
+
   console.log('OpenAI call configuration:', {
+    apiKeyId,
     model,
     temperature,
     maxTokens,
@@ -19,13 +19,15 @@ export async function callOpenAI(apiKeyName, model, messages, temperature, maxTo
   });
 
   try {
-    // Prepare system message with custom instructions if provided
+    // Prepare message array with custom instructions if provided
+    let preparedMessages = [...messages];
     if (customInstructions) {
-      const systemMessageIndex = messages.findIndex(m => m.role === 'system');
+      const systemMessageIndex = preparedMessages.findIndex(m => m.role === 'system');
       if (systemMessageIndex >= 0) {
-        messages[systemMessageIndex].content = `${messages[systemMessageIndex].content}\n\n${customInstructions}`;
+        preparedMessages[systemMessageIndex].content = 
+          `${preparedMessages[systemMessageIndex].content}\n\n${customInstructions}`;
       } else {
-        messages.unshift({
+        preparedMessages.unshift({
           role: 'system',
           content: customInstructions
         });
@@ -38,12 +40,11 @@ export async function callOpenAI(apiKeyName, model, messages, temperature, maxTo
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        apiKeyName,
+        apiKeyId,
         model,
-        messages,
+        messages: preparedMessages,
         temperature,
         maxTokens,
-        customInstructions
       }),
     });
 
@@ -54,46 +55,75 @@ export async function callOpenAI(apiKeyName, model, messages, temperature, maxTo
     }
 
     const data = await response.json();
-    console.log('OpenAI API response structure:', {
+    console.log('OpenAI API response received:', {
+      status: response.status,
       hasChoices: !!data.choices,
-      choicesLength: data.choices?.length,
-      hasMessage: !!data.choices?.[0]?.message,
-      model: model // Log the model being used
+      messageLength: data.choices?.[0]?.message?.content?.length
     });
 
-    if (data.choices && data.choices.length > 0 && data.choices[0].message) {
-      return data.choices[0].message.content;
-    } else {
-      console.error('Unexpected response structure:', data);
-      throw new Error('Unexpected response structure from OpenAI API');
+    if (!data.choices?.[0]?.message?.content) {
+      throw new Error('Invalid response format from OpenAI API');
     }
+
+    return data.choices[0].message.content;
   } catch (error) {
     console.error('Error in OpenAI call:', error);
-    throw new Error(`OpenAI API error: ${error.message}`);
+    throw error;
   }
 }
 
 /**
  * Helper function to validate OpenAI API key
  */
-export async function validateApiKey(apiKey) {
-  try {
-    const response = await fetch('https://api.openai.com/v1/models', {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    });
-    return response.ok;
-  } catch (error) {
-    console.error('Error validating API key:', error);
-    return false;
+async function validateApiKey(apiKey) {
+// In openaiService.js - Update error handling in callOpenAI
+try {
+  const response = await fetch('http://localhost:3000/api/openai', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      apiKeyId,
+      model,
+      messages,
+      temperature,
+      maxTokens,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error('OpenAI API error response:', errorData);
+    let errorMessage = errorData.details || errorData.error || `HTTP error! status: ${response.status}`;
+    if (errorData.type === 'timeout') {
+      errorMessage = 'The request timed out. Please try again.';
+    }
+    throw new Error(errorMessage);
   }
+
+  const data = await response.json();
+  console.log('OpenAI API response received:', {
+    status: response.status,
+    hasChoices: !!data.choices,
+    messageLength: data.choices?.[0]?.message?.content?.length
+  });
+
+  if (!data.choices?.[0]?.message?.content) {
+    throw new Error('Invalid response format from OpenAI API');
+  }
+
+  return data.choices[0].message.content;
+} catch (error) {
+  console.error('Error in OpenAI call:', error);
+  throw error;
+}
 }
 
 /**
  * Estimates token usage for a set of messages
  */
-export function estimateTokenUsage(messages) {
+function estimateTokenUsage(messages) {
   return messages.reduce((total, message) => {
     // Rough estimate: 4 characters ≈ 1 token
     const contentLength = (message.content || '').length;
@@ -105,7 +135,7 @@ export function estimateTokenUsage(messages) {
 /**
  * Formats OpenAI API response
  */
-export function formatOpenAIResponse(response) {
+function formatOpenAIResponse(response) {
   if (response.choices && response.choices.length > 0) {
     return response.choices[0].message.content.trim();
   }
@@ -115,7 +145,7 @@ export function formatOpenAIResponse(response) {
 /**
  * Gets the cost estimate for an API call
  */
-export function getCostEstimate(model, tokens) {
+function getCostEstimate(model, tokens) {
   const costPerToken = {
     'gpt-4o': 0.01,
     'gpt-4o-mini': 0.005,
@@ -131,7 +161,7 @@ export function getCostEstimate(model, tokens) {
 /**
  * Validates and prepares messages for the API call
  */
-export function prepareMessages(messages, customInstructions) {
+function prepareMessages(messages, customInstructions) {
   const preparedMessages = [...messages];
 
   if (customInstructions) {
@@ -153,7 +183,7 @@ export function prepareMessages(messages, customInstructions) {
 /**
  * Validates model configuration parameters
  */
-export function validateModelConfig(model, temperature, maxTokens) {
+function validateModelConfig(model, temperature, maxTokens) {
   const modelConfig = {
     'gpt-4o': { maxTokens: 4096, tempRange: { min: 0.1, max: 1.0 } },
     'gpt-4o-mini': { maxTokens: 2048, tempRange: { min: 0.1, max: 1.0 } },
@@ -176,7 +206,7 @@ export function validateModelConfig(model, temperature, maxTokens) {
 /**
  * Handles errors from the OpenAI API
  */
-export function handleOpenAIError(error) {
+function handleOpenAIError(error) {
   const errorMessages = {
     'invalid_api_key': 'Invalid API key. Please check your API key configuration.',
     'model_not_found': 'The specified model is not available. Please check your model configuration.',
@@ -198,7 +228,8 @@ export function handleOpenAIError(error) {
   };
 }
 
-export default {
+// Export all functions as a default object
+export {
   callOpenAI,
   validateApiKey,
   estimateTokenUsage,

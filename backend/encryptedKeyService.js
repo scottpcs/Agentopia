@@ -89,31 +89,32 @@ class EncryptedKeyService {
     }
   }
 
-  async getApiKey(userId, name) {
-    const query = 'SELECT * FROM api_keys WHERE user_id = $1 AND name = $2';
-    try {
-      const result = await this.pool.query(query, [userId, name]);
-      if (result.rows.length === 0) {
-        console.log('API key not found');
-        return null;
-      }
-      const row = result.rows[0];
-      const decryptedValue = this.decrypt(row.encrypted_value);
-      console.log('API key retrieved successfully');
-      return {
-        id: row.id,
-        name: row.name,
-        value: decryptedValue,
-        expiresAt: row.expires_at,
-        usageLimit: row.usage_limit,
-        usageCount: row.usage_count,
-        createdAt: row.created_at
-      };
-    } catch (error) {
-      console.error('Error retrieving API key:', error);
-      throw error;
+// encryptedKeyService.js
+async getApiKey(userId, name) {
+  const query = 'SELECT * FROM api_keys WHERE user_id = $1 AND name = $2';
+  try {
+    const result = await this.pool.query(query, [userId, name]);
+    if (result.rows.length === 0) {
+      console.log('API key not found');
+      return null;
     }
+    const row = result.rows[0];
+    const decryptedValue = this.decrypt(row.encrypted_value);
+    console.log('API key retrieved successfully');
+    return {
+      id: row.id,
+      name: row.name,
+      value: decryptedValue,
+      expiresAt: row.expires_at,
+      usageLimit: row.usage_limit,
+      usageCount: row.usage_count,
+      createdAt: row.created_at
+    };
+  } catch (error) {
+    console.error('Error retrieving API key:', error);
+    throw error;
   }
+}
 
   async listApiKeys(userId) {
     const query = 'SELECT id, name, expires_at, usage_limit, usage_count, created_at FROM api_keys WHERE user_id = $1';
