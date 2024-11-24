@@ -1,0 +1,9 @@
+{
+    "name": "code-change-manager",
+    "version": "1.0.0",
+    "description": "Tool for managing code changes in Agentopia",
+    "main": "CodeChangeManager.js",
+    "scripts": {
+      "test": "node test.js"
+    }
+  }
