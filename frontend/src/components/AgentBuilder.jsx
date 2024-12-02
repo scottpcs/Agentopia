@@ -316,57 +316,48 @@ const AgentBuilder = ({
 
   // Handle saving agent
   const handleSave = async () => {
-    try {
-      if (!validateForm()) {
-        return;
+        if (!validateForm()) {
+          return;
       }
-
-      setIsSaving(true);
-      
-      const agentConfig = {
-        id: selectedAgentId || `agent-${Date.now()}`,
-        name: agentName.trim(),
-        type: 'aiAgent',
-        data: {
-          name: agentName.trim(),
-          type: 'ai',
-          personality,
-          role: {
-            ...role,
-            type: role.type === 'custom' ? role.customRole : role.type
-          },
-          expertise,
-          modelConfig: {
-            ...modelConfig,
-            model: modelConfig.model,
-            apiKeyId: modelConfig.apiKeyId,
-            parameters: {
-              ...modelConfig.parameters,
-              temperature: modelConfig.parameters?.temperature || 0.7,
-              maxTokens: modelConfig.parameters?.maxTokens || 2048
+  
+        setIsSaving(true);
+        try {
+          const agentConfig = {
+          id: selectedAgentId || `agent-${Date.now()}`,
+            name: agentName.trim(),
+            type: 'aiAgent',
+            data: {
+              name: agentName.trim(),
+              type: 'ai',
+              personality,
+              role: {
+                ...role,
+                type: role.type === 'custom' ? role.customRole : role.type
+            },
+              expertise,
+              modelConfig: {
+                ...modelConfig,
+                model: modelConfig.model,
+                apiKeyId: modelConfig.apiKeyId,
+                parameters: {
+                  ...modelConfig.parameters
+              }
             }
-          },
-          instructions: {
-            generated: generatedInstructions,
-            custom: isUsingCustomInstructions ? customInstructions : null,
-            isUsingCustom: isUsingCustomInstructions
           }
+        };
+  
+          if (isCreatingNew) {
+            await onSave(agentConfig);
+        } else {
+            await onUpdate(selectedAgentId, agentConfig);
         }
-      };
-
-      if (isCreatingNew) {
-        await onSave(agentConfig);
-      } else {
-        await onUpdate(selectedAgentId, agentConfig);
+  
+          onClose();
+      } catch (error) {
+          setNameError('Failed to save agent: ' + error.message);
+      } finally {
+          setIsSaving(false);
       }
-
-      onClose();
-    } catch (error) {
-      console.error('Error saving agent:', error);
-      setNameError(`Failed to save agent: ${error.message}`);
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   // Handle deleting agent

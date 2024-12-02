@@ -1,34 +1,79 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
 import { Input } from "./ui/input";
 
 const TextInputNode = ({ data, isConnectable }) => {
-  // Update the node's data when inputText changes
-  useEffect(() => {
-    if (data.onChange && data.id) {
-      data.onChange(data.id, { lastOutput: data.inputText });
-    }
-  }, [data.inputText]);
+  // Use data.inputText as the single source of truth
+  const [localValue, setLocalValue] = useState('');
 
-  const handleInputChange = (e) => {
+  // Strong synchronization effect - update local state whenever data changes
+  useEffect(() => {
+    // Check both inputText and text fields to handle all update sources
+    const nodeText = data.inputText || data.text || '';
+    if (nodeText !== localValue) {
+      setLocalValue(nodeText);
+      console.log('TextInputNode syncing from data:', {
+        nodeText,
+        previousLocal: localValue,
+        dataSource: {
+          inputText: data.inputText,
+          text: data.text
+        }
+      });
+    }
+  }, [data.inputText, data.text]);
+
+  const updateNodeData = (newValue) => {
     if (data.onChange && data.id) {
-      data.onChange(data.id, { inputText: e.target.value });
+      const updatedData = {
+        ...data,
+        inputText: newValue,
+        text: newValue,
+        value: newValue,
+        lastOutput: newValue,
+        // Additional fields for workflow compatibility
+        input: newValue,
+        output: newValue
+      };
+
+      console.log('TextInputNode updating data:', {
+        id: data.id,
+        oldValue: localValue,
+        newValue,
+        fullData: updatedData
+      });
+
+      data.onChange(data.id, updatedData);
     }
   };
 
+  const handleInputChange = (e) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);  // Update local state
+    updateNodeData(newValue); // Update node data
+  };
+
+  // Initial sync on mount
+  useEffect(() => {
+    if (data.id && (data.inputText || data.text)) {
+      const initialText = data.inputText || data.text;
+      setLocalValue(initialText);
+      updateNodeData(initialText);
+    }
+  }, []);
+
   return (
-    <div className="text-input-node p-4 rounded-lg bg-white border border-gray-200 shadow-sm">
+    <div className="text-input-node p-4 rounded-lg bg-white border border-gray-200 shadow-sm w-64">
       <div className="font-bold mb-2">{data.label || 'Text Input'}</div>
       <Input
-        value={data.inputText || ''}
+        value={localValue}
         onChange={handleInputChange}
         placeholder="Enter text..."
-        className="mb-2"
+        className="mb-2 w-full"
       />
-      {data.lastOutput && (
-        <div className="text-xs text-gray-500 mb-2">
-          Last output: {data.lastOutput.substring(0, 50)}
-          {data.lastOutput.length > 50 ? '...' : ''}
+      {localValue && (
+        <div className="text-xs text-gray-500 mb-2 break-words">
+          Last output: {localValue}
         </div>
       )}
       <Handle

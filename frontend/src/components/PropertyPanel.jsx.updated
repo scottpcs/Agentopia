@@ -1,0 +1,211 @@
+import React, { useState, useEffect } from 'react';
+import { Label } from "./ui/label";
+import { Input } from "./ui/input";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Cross2Icon } from '@radix-ui/react-icons';
+import { generateAgentConfiguration } from '../utils/agentConfigConverter';
+import { validateModelConfig, MODEL_CONFIGS } from '../utils/modelConfigUtils';
+import { estimateTokenUsage } from '../services/openaiService';
+
+const MODEL_OPTIONS = [
+  { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o mini', description: 'Affordable and intelligent small model for fast, lightweight tasks' },
+  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'The latest GPT-4 Turbo model with vision capabilities' },
+  { value: 'gpt-4', label: 'GPT-4', description: 'Powerful model for complex tasks, 8k context window' },
+  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Fast, inexpensive model for many tasks' },
+  { value: 'gpt-3.5-turbo-16k', label: 'GPT-3.5 Turbo 16k', description: 'GPT-3.5 Turbo with extended 16k token context' }
+];
+
+import React, { useState, useEffect } from 'react';
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Cross2Icon } from '@radix-ui/react-icons';
+import { MODEL_OPTIONS } from '../utils/modelConfigUtils';
+const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
+      const [error, setError] = useState('');
+      const [showInstructions, setShowInstructions] = useState(false);
+      const [localApiKey, setLocalApiKey] = useState(node.data?.apiKeyId || '');
+  
+      // Sync local state with node data
+      useEffect(() => {
+        setLocalApiKey(node.data?.apiKeyId || '');
+    }, [node.data?.apiKeyId]);
+  
+      const handleChange = (key, value) => {
+        try {
+          setError('');
+          if (key === 'apiKeyId') {
+            // Update local state immediately
+            setLocalApiKey(value);
+          
+            // Create the complete updated data object
+            const updatedData = {
+              ...node.data,
+              apiKeyId: value,
+              modelConfig: {
+                ...node.data.modelConfig,
+                apiKeyId: value
+            }
+          };
+          
+            console.log('Updating node with API key:', {
+              nodeId: node.id,
+              apiKeyId: value,
+              fullData: updatedData
+          });
+          
+            onChange(node.id, updatedData);
+        } else if (key === 'modelConfig') {
+            // Handle model configuration updates
+            onChange(node.id, {
+              ...node.data,
+              modelConfig: {
+                ...node.data.modelConfig,
+                ...value
+            }
+          });
+        } else {
+            // Handle other property updates
+            onChange(node.id, {
+              ...node.data,
+              [key]: value
+          });
+        }
+      } catch (error) {
+          console.error('Error updating node:', error);
+        setError(`Failed to update: ${error.message}`);
+      }
+    };
+  
+      const renderContent = () => {
+        switch (node.type) {
+          case 'aiAgent':
+            return (
+              <>
+                <div>
+                  <Label htmlFor="apiKeyName">API Key</Label>
+                  <select
+                    id="apiKeyName"
+                  value={localApiKey}
+                  onChange={(e) => handleChange('apiKeyId', e.target.value)}
+                    className="w-full mt-1 p-2 border rounded-md"
+                  >
+                    <option value="">Select API Key</option>
+                    {apiKeys.map((key) => (
+                    <option key={key.id} value={key.name}>
+                      {key.name}
+                      </option>
+                  ))}
+                  </select>
+                  {!localApiKey && (
+                    <p className="text-sm text-amber-600 mt-1">
+                      Please select an API key to enable this agent
+                    </p>
+                )}
+                </div>
+  
+                <div>
+                  <Label htmlFor="model">Model</Label>
+                  <select
+                    id="model"
+                  value={node.data?.modelConfig?.model || ''}
+                    onChange={(e) => handleChange('modelConfig', {
+                      ...node.data.modelConfig,
+                      model: e.target.value
+                  })}
+                    className="w-full mt-1 p-2 border rounded-md"
+                  >
+                    <option value="">Select Model</option>
+                    {MODEL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label} - {option.description}
+                      </option>
+                  ))}
+                  </select>
+                </div>
+              </>
+            );
+  
+          case 'textInput':
+            return (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                  value={node.data?.name || ''}
+                    onChange={(e) => onChange(node.id, { 
+                      ...node.data,
+                      name: e.target.value 
+                  })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="inputText">Input Text</Label>
+                  <Input 
+                    id="inputText"
+                  value={node.data?.inputText || ''}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      onChange(node.id, { 
+                        ...node.data,
+                        inputText: newValue,
+                        lastOutput: newValue
+                    });
+                  }}
+                    placeholder="Enter text..."
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            );
+  
+          case 'textOutput':
+            return (
+              <div>
+                <Label htmlFor="outputText">Output Text (Read Only)</Label>
+                <textarea
+                  id="outputText"
+                value={node.data?.text || ''}
+                  readOnly
+                  className="w-full p-2 border rounded mt-1 bg-gray-100"
+                rows={4}
+                />
+              </div>
+            );
+  
+          default:
+            return null;
+      }
+    };
+  
+      return (
+        <div className="property-panel fixed right-0 top-0 h-full w-96 bg-white shadow-lg p-4 overflow-y-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold">Node Properties</h3>
+            <Button 
+              variant="ghost" 
+            onClick={onClose}
+              className="p-1 h-auto"
+            >
+              <Cross2Icon className="h-4 w-4" />
+            </Button>
+          </div>
+  
+          {error && (
+            <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+            {error}
+            </div>
+        )}
+        
+          <div className="space-y-4">
+          {renderContent()}
+          </div>
+        </div>
+      );
+};
+
+export default PropertyPanel;

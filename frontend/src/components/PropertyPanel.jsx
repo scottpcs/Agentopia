@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Label } from "./ui/label";
-import { Input } from "./ui/input";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Cross2Icon } from '@radix-ui/react-icons';
 import { generateAgentConfiguration } from '../utils/agentConfigConverter';
@@ -150,37 +150,10 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
     );
   };
 
-  return (
-    <div className="property-panel fixed right-0 top-0 h-full w-96 bg-white shadow-lg p-4 overflow-y-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-lg font-bold">Node Properties</h3>
-        <Button 
-          variant="ghost" 
-          onClick={onClose}
-          className="p-1 h-auto"
-        >
-          <Cross2Icon className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
-          {error}
-        </div>
-      )}
-      
-      <div className="space-y-4">
-        <div>
-          <Label htmlFor="name">Name</Label>
-          <Input
-            id="name"
-            value={node.data?.name || ''}
-            onChange={(e) => handleChange('name', e.target.value)}
-            className="mt-1"
-          />
-        </div>
-        
-        {(node.type === 'aiAgent' || node.data?.type === 'ai') && (
+  const renderContent = () => {
+    switch (node.type) {
+      case 'aiAgent':
+        return (
           <>
             <div>
               <Label htmlFor="apiKeyName">API Key</Label>
@@ -222,100 +195,80 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
                   </option>
                 ))}
               </select>
-              {node.data?.modelConfig?.model && (
-                <p className="text-sm text-gray-600 mt-1">
-                  {MODEL_OPTIONS.find(o => o.value === node.data.modelConfig?.model)?.description}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="temperature">Temperature</Label>
-              <Input
-                id="temperature"
-                type="number"
-                min="0"
-                max="2"
-                step="0.1"
-                value={node.data?.modelConfig?.parameters?.temperature || 0.7}
-                onChange={(e) => handleChange('modelConfig', {
-                  ...node.data.modelConfig,
-                  parameters: {
-                    ...node.data.modelConfig?.parameters,
-                    temperature: parseFloat(e.target.value)
-                  }
-                })}
-                className="mt-1"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Controls randomness: 0 is focused, 1 is balanced, 2 is more creative
-              </p>
-            </div>
-
-            <div>
-              <Label htmlFor="maxTokens">Max Tokens</Label>
-              <Input
-                id="maxTokens"
-                type="number"
-                min="1"
-                max={MODEL_CONFIGS[node.data?.modelConfig?.model || 'gpt-4o-mini']?.maxTokens || 4096}
-                value={node.data?.modelConfig?.parameters?.maxTokens || 2048}
-                onChange={(e) => handleChange('modelConfig', {
-                  ...node.data.modelConfig,
-                  parameters: {
-                    ...node.data.modelConfig?.parameters,
-                    maxTokens: parseInt(e.target.value)
-                  }
-                })}
-                className="mt-1"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Maximum length of generated response
-              </p>
-            </div>
-
-            {renderInstructions()}
-          </>
-        )}
-        
-        {(node.type === 'humanAgent' || node.data?.type === 'human') && (
-          <>
-            <div>
-              <Label htmlFor="role">Role</Label>
-              <Input
-                id="role"
-                value={node.data?.role || ''}
-                onChange={(e) => handleChange('role', e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="instructions">Instructions</Label>
-              <textarea
-                id="instructions"
-                value={node.data?.instructions || ''}
-                onChange={(e) => handleChange('instructions', e.target.value)}
-                className="w-full p-2 border rounded mt-1"
-                rows={4}
-              />
             </div>
           </>
-        )}
+        );
 
-        {node.type === 'textInput' && (
-          <div>
-            <Label htmlFor="inputText">Input Text</Label>
-            <textarea
-              id="inputText"
-              value={node.data?.inputText || ''}
-              onChange={(e) => handleChange('inputText', e.target.value)}
-              className="w-full p-2 border rounded mt-1"
-              rows={4}
-            />
-          </div>
-        )}
-        
-        {node.type === 'textOutput' && (
+        // Updates to the renderContent() method in PropertyPanel.jsx, textInput case:
+
+        // Update to the renderContent() method in PropertyPanel.jsx, textInput case:
+
+        case 'textInput': {
+          const [localInputText, setLocalInputText] = React.useState(node.data?.inputText || '');
+
+          React.useEffect(() => {
+            if (node.data?.inputText !== undefined && node.data.inputText !== localInputText) {
+              setLocalInputText(node.data.inputText);
+            }
+          }, [node.data?.inputText]);
+
+          const updateNodeData = (newValue) => {
+            // Use the same data structure as TextInputNode
+            onChange(node.id, {
+              ...node.data,
+              inputText: newValue,
+              text: newValue,
+              value: newValue,
+              lastOutput: newValue,
+              input: newValue,
+              output: newValue,
+              contextInput: newValue,
+              contextOutput: newValue
+            });
+
+            console.log('PropertyPanel text input updated:', {
+              id: node.id,
+              newValue,
+              fullData: node.data
+            });
+          };
+
+          const handleTextChange = (e) => {
+            const newValue = e.target.value;
+            setLocalInputText(newValue);
+            updateNodeData(newValue);
+          };
+
+          return (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  value={node.data?.name || ''}
+                  onChange={(e) => onChange(node.id, { 
+                    ...node.data,
+                    name: e.target.value 
+                  })}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="propertyInputText">Input Text</Label>
+                <textarea 
+                  id="propertyInputText"
+                  value={localInputText}
+                  onChange={handleTextChange}
+                  placeholder="Enter text..."
+                  className="w-full p-2 border rounded mt-1 min-h-[100px]"
+                />
+              </div>
+            </div>
+          );
+        }
+
+      case 'textOutput':
+        return (
           <div>
             <Label htmlFor="outputText">Output Text (Read Only)</Label>
             <textarea
@@ -326,30 +279,59 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
               rows={4}
             />
           </div>
-        )}
+        );
 
-        {node.data?.lastOutput && (
-          <Card>
-            <CardContent className="pt-4">
-              <Label>Last Output</Label>
-              <div className="mt-2 text-sm bg-gray-50 p-2 rounded">
-                {node.data.lastOutput}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      default:
+        return null;
+    }
+  };
 
-        {node.data?.error && (
-          <Card className="border-red-200">
-            <CardContent className="pt-4">
-              <Label className="text-red-600">Error</Label>
-              <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">
-                {node.data.error}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+  return (
+    <div className="property-panel fixed right-0 top-0 h-full w-96 bg-white shadow-lg p-4 overflow-y-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-lg font-bold">Node Properties</h3>
+        <Button 
+          variant="ghost" 
+          onClick={onClose}
+          className="p-1 h-auto"
+        >
+          <Cross2Icon className="h-4 w-4" />
+        </Button>
       </div>
+
+      {error && (
+        <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+      
+      <div className="space-y-4">
+        {renderContent()}
+      </div>
+
+      {node.data?.lastOutput && (
+        <Card>
+          <CardContent className="pt-4">
+            <Label>Last Output</Label>
+            <div className="mt-2 text-sm bg-gray-50 p-2 rounded">
+              {node.data.lastOutput}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {node.data?.error && (
+        <Card className="border-red-200">
+          <CardContent className="pt-4">
+            <Label className="text-red-600">Error</Label>
+            <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">
+              {node.data.error}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {(node.type === 'aiAgent' || node.data?.type === 'ai') && renderInstructions()}
     </div>
   );
 };
