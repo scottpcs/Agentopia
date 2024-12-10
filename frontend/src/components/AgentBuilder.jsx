@@ -316,48 +316,50 @@ const AgentBuilder = ({
 
   // Handle saving agent
   const handleSave = async () => {
-        if (!validateForm()) {
-          return;
-      }
+    if (!validateForm()) return;
   
-        setIsSaving(true);
-        try {
-          const agentConfig = {
-          id: selectedAgentId || `agent-${Date.now()}`,
-            name: agentName.trim(),
-            type: 'aiAgent',
-            data: {
-              name: agentName.trim(),
-              type: 'ai',
-              personality,
-              role: {
-                ...role,
-                type: role.type === 'custom' ? role.customRole : role.type
-            },
-              expertise,
-              modelConfig: {
-                ...modelConfig,
-                model: modelConfig.model,
-                apiKeyId: modelConfig.apiKeyId,
-                parameters: {
-                  ...modelConfig.parameters
-              }
-            }
-          }
-        };
-  
-          if (isCreatingNew) {
-            await onSave(agentConfig);
-        } else {
-            await onUpdate(selectedAgentId, agentConfig);
+    try {
+      setIsSaving(true);
+      const agentConfig = {
+        id: selectedAgentId || `aiAgent-${Date.now()}`,
+        name: agentName.trim(),
+        type: 'ai',
+        apiKeyId: modelConfig.apiKeyId, // Ensure this is set
+        modelConfig: {
+          ...modelConfig,
+          apiKeyId: modelConfig.apiKeyId
+        },
+        data: {
+          name: agentName.trim(),
+          type: 'ai',
+          personality,
+          role: {
+            ...role,
+            type: role.type === 'custom' ? role.customRole : role.type
+          },
+          expertise,
+          modelConfig: {
+            ...modelConfig,
+            apiKeyId: modelConfig.apiKeyId
+          },
+          apiKeyId: modelConfig.apiKeyId
         }
+      };
   
-          onClose();
-      } catch (error) {
-          setNameError('Failed to save agent: ' + error.message);
-      } finally {
-          setIsSaving(false);
+      console.log('Saving agent configuration:', agentConfig);
+      
+      if (isCreatingNew) {
+        await onSave(agentConfig);
+      } else {
+        await onUpdate(selectedAgentId, agentConfig);
       }
+  
+      onClose();
+    } catch (error) {
+      setNameError('Failed to save agent: ' + error.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Handle deleting agent

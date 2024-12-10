@@ -38,7 +38,25 @@ Agentopia empowers users to visually design and execute complex AI workflows tha
    - Timeout handling and error recovery
    - Model response validation and processing
 
-### 4. API and Security Enhancements:
+### 4. Node Data Synchronization:
+   - Robust bi-directional data sync between node UI components and property panels
+   - Proper event handling for direct node input
+   - Enhanced data persistence and state management
+   - Consistent data structure across all update paths
+   - Real-time synchronization between different input methods
+   - Comprehensive logging for debugging data flow
+   - Improved error handling for data updates
+
+### 5. Decision Node Implementation:
+   - AI-powered decision making with configurable outputs
+   - Dynamic routing based on AI decisions
+   - Support for custom decision criteria
+   - Integration with agent configuration system
+   - Clear visualization of decision paths
+   - Detailed logging of decision process
+   - Error handling for decision failures
+
+### 6. API and Security Enhancements:
    - Secure API key storage with encryption
    - Improved error handling and logging
    - Debug endpoints for system diagnosis
@@ -48,7 +66,7 @@ Agentopia empowers users to visually design and execute complex AI workflows tha
    - API key validation and testing
    - Usage tracking and monitoring
 
-### 5. Backend Infrastructure:
+### 7. Backend Infrastructure:
    - Enhanced server initialization and setup
    - Improved database connection management
    - File system management for workflows
@@ -57,13 +75,94 @@ Agentopia empowers users to visually design and execute complex AI workflows tha
    - Diagnostic endpoints for system health
    - Support for different deployment environments
 
-### 6. Testing and Debugging:
+### 8. Testing and Debugging:
    - Added comprehensive debug endpoints
    - Improved error logging and tracking
    - API key validation tools
    - System health monitoring
    - Database connection testing
    - Service status checking
+
+## Developer Guidelines
+
+### Node Data Management
+When developing nodes that accept user input, follow these principles:
+
+1. **State Management**
+   ```javascript
+   // Always use both local state and node data
+   const [localValue, setLocalValue] = useState(data?.inputText || '');
+
+   // Sync with property panel changes
+   useEffect(() => {
+     if (data?.inputText !== undefined && data.inputText !== localValue) {
+       setLocalValue(data.inputText);
+     }
+   }, [data.inputText, localValue]);
+   ```
+
+2. **Data Updates**
+   - Use the node's ID from props, not from data object
+   - Update both local state and node data when changes occur
+   - Include comprehensive update metadata for debugging
+
+3. **Property Panel Integration**
+   - Ensure nodes respond to property panel changes
+   - Maintain single source of truth for data
+   - Use consistent data structure across all update paths
+
+### Best Practices for Node Development
+
+1. **Data Flow**
+   - Always handle bi-directional updates
+   - Implement proper event handling for user input
+   - Add logging for key data changes
+   - Consider all update sources (direct input, property panel, programmatic)
+
+2. **State Synchronization**
+   ```javascript
+   const updateNodeData = (newValue) => {
+     if (data?.onChange && id) {
+       const updatedData = {
+         ...data,
+         inputText: newValue,
+         text: newValue,
+         value: newValue,
+         lastOutput: newValue,
+         input: newValue,
+         output: newValue
+       };
+       data.onChange(id, updatedData);
+     }
+   };
+   ```
+
+3. **Event Handling**
+   - Handle direct user input appropriately
+   - Consider input completion events (blur, Enter key)
+   - Maintain UI responsiveness during updates
+
+4. **Debugging Support**
+   - Add clear logging for state changes
+   - Include source information in updates
+   - Log both successful updates and failures
+
+### Common Pitfalls to Avoid
+
+1. **Data Access**
+   - Don't rely on data.id - use the id prop from React Flow
+   - Don't assume all update paths trigger the same events
+   - Don't skip state updates for performance unless profiling shows issues
+
+2. **State Management**
+   - Don't maintain multiple sources of truth
+   - Don't update state without updating node data
+   - Don't ignore property panel updates
+
+3. **Event Handling**
+   - Don't skip input validation
+   - Don't forget to handle edge cases (empty input, invalid data)
+   - Don't ignore input completion events
 
 ## Next Key Work Focus Areas
 
@@ -79,29 +178,29 @@ Agentopia empowers users to visually design and execute complex AI workflows tha
    - Create visualization tools for conversation flows
    - Add performance monitoring and reporting
 
-3. **Advanced Conversation Features**
-   - Add typing indicators and message status
-   - Implement message reactions and threading
-   - Add support for multimedia content
-   - Enable conversation forking and merging
+3. **Advanced Input Handling**
+   - Add input validation framework
+   - Implement undo/redo for input changes
+   - Add support for rich text input
+   - Implement input masks and formatting options
 
-4. **Workflow Control Enhancement**
+4. **State Management Enhancements**
+   - Implement a more robust state management solution
+   - Add support for node-specific undo/redo
+   - Improve error handling for state updates
+   - Add real-time preview of changes
+
+5. **Workflow Control Enhancement**
    - Add conditional conversation routing
    - Implement conversation triggers and events
    - Add support for parallel conversation threads
    - Enable dynamic participant management
 
-5. **Role and Permission System**
+6. **Role and Permission System**
    - Implement role-based access control
    - Add participant permission management
    - Create role templates and presets
    - Support for custom role definitions
-
-6. **Conversation State Persistence**
-   - Add conversation history storage
-   - Implement conversation recovery
-   - Add export/import capabilities
-   - Enable conversation templates
 
 7. **RAG (Retrieval-Augmented Generation) Integration**
    - Add document context support
@@ -115,7 +214,26 @@ Agentopia empowers users to visually design and execute complex AI workflows tha
    - Add accessibility features
    - Enhance visual feedback and animations
 
-## Previous Next Key Work Focus Areas
+## Technical Stack
+
+- Frontend: React, Vite, React Flow, Tailwind CSS, shadcn/ui
+- Backend: Node.js, Express
+- Database: PostgreSQL
+- APIs: OpenAI
+- Additional Tools: 
+  - Model configuration utilities
+  - Agent configuration converter
+  - Workflow execution engine
+  - Cost estimation tools
+  - Conversation state management
+
+## Conclusion
+
+Agentopia has made significant progress in implementing multi-agent conversations and enhancing the platform's capabilities. Recent improvements in data synchronization, decision nodes, and error management have strengthened the foundation for reliable agent interactions. The focus remains on improving reliability, user experience, and advanced features while maintaining a clear path toward implementing more complex agent interactions and optimizations.
+
+Last updated: December 9, 2024
+
+## Previous Next Key Work Focus Areas (temporary to-do list)
 
 Node Reference Clean-up (completed)
 - Resolve issues where some node types are not being found, resulting in default node types
@@ -133,7 +251,7 @@ Multiple Agent Instances: (implemented, but needs cleanup)
 Multi-Agent Conversations: (implemented but needs clean-up on API handling. Agents should have API already assigned)
 - Develop a new node type or property setting to support multi-agent conversations
 
-Conditional Workflow Control:
+Conditional Workflow Control: (created a basic decision node)
 - Implement conditional conversation entrance and exit
 - Add workflow branching capabilities
 
@@ -148,21 +266,3 @@ Improved Menu Bar Functionality:
 - Implement view change capabilities
 - Add other useful workflow management features
 
-## Technical Stack
-
-- Frontend: React, Vite, React Flow, Tailwind CSS, shadcn/ui
-- Backend: Node.js, Express
-- Database: PostgreSQL
-- APIs: OpenAI
-- Additional Tools: 
-  - Model configuration utilities
-  - Agent configuration converter
-  - Workflow execution engine
-  - Cost estimation tools
-  - Conversation state management
-
-## Conclusion
-
-Agentopia has made significant progress in implementing multi-agent conversations and enhancing the platform's capabilities. Recent improvements in API handling, error management, and system diagnostics have strengthened the foundation for reliable agent interactions. The focus remains on improving reliability, user experience, and advanced features while maintaining a clear path toward implementing more complex agent interactions and optimizations.
-
-Last updated: November 23, 2024

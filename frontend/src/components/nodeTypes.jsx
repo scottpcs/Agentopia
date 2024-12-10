@@ -6,8 +6,9 @@ import TextInputNode from './TextInputNode';
 import TextOutputNode from './TextOutputNode';
 import ConversationNode from './ConversationNode';
 import ContextProcessorNode from './ContextProcessorNode';
+import DecisionNode from './DecisionNode';
 
-// Node type definitions without wrapping them in objects
+// Node type definitions
 export const nodeTypes = {
   aiAgent: AIAgentNode,
   humanAgent: HumanInteractionNode,
@@ -15,8 +16,11 @@ export const nodeTypes = {
   textInput: TextInputNode,
   textOutput: TextOutputNode,
   conversation: ConversationNode,
-  contextProcessor: ContextProcessorNode
+  contextProcessor: ContextProcessorNode,
+  decision: DecisionNode
 };
+
+
 
 // Store the extended configurations separately
 export const nodeConfigs = {
@@ -89,6 +93,62 @@ export const nodeConfigs = {
         turnManagement: 'dynamic',
         contextHandling: 'cumulative',
         allowHumanParticipation: true
+      }
+    }
+  },
+  decision: {
+    defaultName: 'Decision Node',
+    defaults: {
+      width: 250,
+      height: 200,
+      data: {
+        label: 'Decision Node',
+        agent: null,
+        criteria: {
+          rules: [],
+          thresholds: {},
+          priorities: []
+        },
+        outputs: {
+          approve: 'Approve',
+          reject: 'Reject',
+          needsInfo: 'Needs Information'
+        }
+      }
+    }
+  },
+  contextProcessor: {
+    defaultName: 'Context Processor',
+    defaults: {
+      width: 200,
+      height: 150,
+      data: {
+        label: 'Context Processor',
+        processingRules: [],
+        transformations: {}
+      }
+    }
+  },
+  textInput: {
+    defaults: {
+      width: 200,
+      height: 150,
+      data: {
+        label: 'Text Input',
+        inputText: '',
+        output: '',
+        onChange: undefined
+      }
+    }
+  },
+  textOutput: {
+    defaultName: 'Text Output',
+    defaults: {
+      width: 200,
+      height: 100,
+      data: {
+        label: 'Text Output',
+        text: ''
       }
     }
   }

@@ -9,7 +9,8 @@ import {
   MessageCircle,
   ArrowRightLeft,
   Users,
-  Workflow
+  Workflow,
+  GitFork // Added for decision node icon
 } from 'lucide-react';
 
 const NodePalette = ({ onDragStart }) => {
@@ -104,6 +105,27 @@ const NodePalette = ({ onDragStart }) => {
       }
     },
     {
+      type: 'decision',
+      label: 'Decision Node',
+      icon: GitFork,
+      description: 'Route workflow based on AI agent decisions',
+      category: 'Control',
+      data: {
+        label: 'Decision Node',
+        agent: null,
+        criteria: {
+          rules: [],
+          thresholds: {},
+          priorities: []
+        },
+        outputs: {
+          approve: 'Approve',
+          reject: 'Reject',
+          needsInfo: 'Needs Information'
+        }
+      }
+    },
+    {
       type: 'humanInteraction',
       label: 'Human Interaction',
       icon: MessagesSquare,
@@ -152,7 +174,7 @@ const NodePalette = ({ onDragStart }) => {
   }, {});
 
   // Define category order
-  const categoryOrder = ['Basic', 'Agents', 'Collaboration', 'Advanced'];
+  const categoryOrder = ['Basic', 'Agents', 'Control', 'Collaboration', 'Advanced'];
 
   const handleDragStart = (event, nodeType) => {
     event.dataTransfer.setData('application/reactflow', JSON.stringify(nodeType));

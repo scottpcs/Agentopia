@@ -1,66 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
 import { Input } from "./ui/input";
 
-const TextInputNode = ({ data, isConnectable }) => {
-  // Use data.inputText as the single source of truth
-  const [localValue, setLocalValue] = useState('');
+const TextInputNode = ({ id, data, isConnectable }) => {
+  const [localValue, setLocalValue] = useState(data?.inputText || '');
 
-  // Strong synchronization effect - update local state whenever data changes
+  // Add effect to sync with PropertyPanel changes
   useEffect(() => {
-    // Check both inputText and text fields to handle all update sources
-    const nodeText = data.inputText || data.text || '';
-    if (nodeText !== localValue) {
-      setLocalValue(nodeText);
-      console.log('TextInputNode syncing from data:', {
-        nodeText,
-        previousLocal: localValue,
-        dataSource: {
-          inputText: data.inputText,
-          text: data.text
-        }
+    if (data?.inputText !== undefined && data.inputText !== localValue) {
+      console.log('TextInputNode syncing with PropertyPanel:', {
+        nodeId: id,
+        oldValue: localValue,
+        newValue: data.inputText,
+        source: 'propertyPanel'
       });
+      setLocalValue(data.inputText);
     }
-  }, [data.inputText, data.text]);
+  }, [data.inputText, id, localValue]);
 
   const updateNodeData = (newValue) => {
-    if (data.onChange && data.id) {
+    console.log('updateNodeData called with:', {
+      nodeId: id,
+      newValue,
+      source: 'nodeInput'
+    });
+
+    if (data?.onChange && id) {
       const updatedData = {
         ...data,
         inputText: newValue,
         text: newValue,
         value: newValue,
         lastOutput: newValue,
-        // Additional fields for workflow compatibility
         input: newValue,
-        output: newValue
+        output: newValue,
+        contextInput: newValue,
+        contextOutput: newValue
       };
 
-      console.log('TextInputNode updating data:', {
-        id: data.id,
-        oldValue: localValue,
+      console.log('Updating node data:', {
+        id,
         newValue,
         fullData: updatedData
       });
 
-      data.onChange(data.id, updatedData);
+      data.onChange(id, updatedData);
     }
   };
 
   const handleInputChange = (e) => {
     const newValue = e.target.value;
-    setLocalValue(newValue);  // Update local state
-    updateNodeData(newValue); // Update node data
+    setLocalValue(newValue);
+    updateNodeData(newValue);
   };
-
-  // Initial sync on mount
-  useEffect(() => {
-    if (data.id && (data.inputText || data.text)) {
-      const initialText = data.inputText || data.text;
-      setLocalValue(initialText);
-      updateNodeData(initialText);
-    }
-  }, []);
 
   return (
     <div className="text-input-node p-4 rounded-lg bg-white border border-gray-200 shadow-sm w-64">

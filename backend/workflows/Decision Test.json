@@ -1,0 +1,259 @@
+{
+  "nodes": [
+    {
+      "id": "decision-1733777923989",
+      "type": "decision",
+      "position": {
+        "x": 300,
+        "y": 540
+      },
+      "data": {
+        "label": "Decision Node",
+        "name": "Decision Node",
+        "type": "decision",
+        "apiKeys": [
+          {
+            "id": 5,
+            "name": "AgentKey",
+            "expires_at": null,
+            "usage_limit": null,
+            "usage_count": 36,
+            "created_at": "2024-10-21T06:04:46.721Z"
+          },
+          {
+            "id": 6,
+            "name": "OpenAIKey",
+            "expires_at": null,
+            "usage_limit": null,
+            "usage_count": 0,
+            "created_at": "2024-11-23T01:25:17.818Z"
+          }
+        ],
+        "decisionInstruction": "Make a decision based on the input provided. Is this a good deal for us? Yes or No?",
+        "outputs": {
+          "output1": "Yes",
+          "output2": "No"
+        },
+        "agent": {
+          "id": "aiAgent-1733790660874",
+          "name": "Bill",
+          "type": "ai",
+          "apiKeyId": "AgentKey",
+          "modelConfig": {
+            "model": "gpt-4o-mini",
+            "provider": "openai",
+            "parameters": {
+              "temperature": 0.7,
+              "maxTokens": 2048
+            },
+            "apiKeyId": "AgentKey"
+          },
+          "data": {
+            "name": "Bill",
+            "type": "ai",
+            "personality": {
+              "creativity": 50,
+              "tone": 50,
+              "empathy": 50,
+              "assertiveness": 50,
+              "humor": 50,
+              "optimism": 50
+            },
+            "role": {
+              "type": "",
+              "customRole": "",
+              "goalOrientation": 50,
+              "contributionStyle": 50,
+              "taskEmphasis": 50,
+              "domainScope": 50
+            },
+            "expertise": {
+              "level": "intermediate",
+              "knowledgeBalance": 50,
+              "selectedSkills": [],
+              "certainty": 50,
+              "responsibilityScope": 50
+            },
+            "modelConfig": {
+              "model": "gpt-4o-mini",
+              "provider": "openai",
+              "parameters": {
+                "temperature": 0.7,
+                "maxTokens": 2048
+              },
+              "apiKeyId": "AgentKey"
+            },
+            "apiKeyId": "AgentKey"
+          }
+        },
+        "error": "No AI agent configured for decision node",
+        "status": "error",
+        "lastInput": "",
+        "lastOutput": "No data to pass to the next node",
+        "lastDecision": {
+          "decision": "No",
+          "explanation": "No deal can be evaluated as no input was provided",
+          "output": "No data to pass to the next node"
+        }
+      },
+      "width": 290,
+      "height": 653,
+      "selected": true,
+      "dragging": false,
+      "positionAbsolute": {
+        "x": 300,
+        "y": 540
+      }
+    },
+    {
+      "id": "textInput-1733777928602",
+      "type": "textInput",
+      "position": {
+        "x": 240,
+        "y": 330
+      },
+      "data": {
+        "label": "Text Input",
+        "name": "Text Input",
+        "type": "textInput",
+        "apiKeys": [
+          {
+            "id": 5,
+            "name": "AgentKey",
+            "expires_at": null,
+            "usage_limit": null,
+            "usage_count": 36,
+            "created_at": "2024-10-21T06:04:46.721Z"
+          },
+          {
+            "id": 6,
+            "name": "OpenAIKey",
+            "expires_at": null,
+            "usage_limit": null,
+            "usage_count": 0,
+            "created_at": "2024-11-23T01:25:17.818Z"
+          }
+        ],
+        "lastInput": "",
+        "lastOutput": "",
+        "status": "completed",
+        "error": "No AI agent configured for decision node"
+      },
+      "width": 290,
+      "height": 184,
+      "selected": false,
+      "dragging": false,
+      "positionAbsolute": {
+        "x": 240,
+        "y": 330
+      }
+    },
+    {
+      "id": "textOutput-1733781009592",
+      "type": "textOutput",
+      "position": {
+        "x": 180,
+        "y": 900
+      },
+      "data": {
+        "label": "Text Output",
+        "name": "Text Output",
+        "type": "textOutput",
+        "apiKeys": [
+          {
+            "id": 5,
+            "name": "AgentKey",
+            "expires_at": null,
+            "usage_limit": null,
+            "usage_count": 36,
+            "created_at": "2024-10-21T06:04:46.721Z"
+          },
+          {
+            "id": 6,
+            "name": "OpenAIKey",
+            "expires_at": null,
+            "usage_limit": null,
+            "usage_count": 0,
+            "created_at": "2024-11-23T01:25:17.818Z"
+          }
+        ]
+      },
+      "width": 154,
+      "height": 130,
+      "positionAbsolute": {
+        "x": 180,
+        "y": 900
+      }
+    },
+    {
+      "id": "textOutput-1733781011885",
+      "type": "textOutput",
+      "position": {
+        "x": 720,
+        "y": 885
+      },
+      "data": {
+        "label": "Text Output",
+        "name": "Text Output",
+        "type": "textOutput",
+        "apiKeys": [
+          {
+            "id": 5,
+            "name": "AgentKey",
+            "expires_at": null,
+            "usage_limit": null,
+            "usage_count": 36,
+            "created_at": "2024-10-21T06:04:46.721Z"
+          },
+          {
+            "id": 6,
+            "name": "OpenAIKey",
+            "expires_at": null,
+            "usage_limit": null,
+            "usage_count": 0,
+            "created_at": "2024-11-23T01:25:17.818Z"
+          }
+        ],
+        "text": "",
+        "lastOutput": "",
+        "status": "completed"
+      },
+      "width": 154,
+      "height": 130,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 720,
+        "y": 885
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "decision-1733777923989",
+      "sourceHandle": "output1",
+      "target": "textOutput-1733781009592",
+      "targetHandle": "input",
+      "id": "reactflow__edge-decision-1733777923989output1-textOutput-1733781009592input"
+    },
+    {
+      "source": "decision-1733777923989",
+      "sourceHandle": "output2",
+      "target": "textOutput-1733781011885",
+      "targetHandle": "input",
+      "id": "reactflow__edge-decision-1733777923989output2-textOutput-1733781011885input"
+    },
+    {
+      "source": "textInput-1733777928602",
+      "sourceHandle": null,
+      "target": "decision-1733777923989",
+      "targetHandle": null,
+      "id": "reactflow__edge-textInput-1733777928602-decision-1733777923989"
+    }
+  ],
+  "viewport": {
+    "x": -120.20202991201432,
+    "y": -312.8702483967583,
+    "zoom": 1.4920733066684846
+  }
+}

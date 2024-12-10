@@ -9,7 +9,8 @@ import {
   User, 
   MessageCircle,
   Users,
-  Grip 
+  Grip, 
+  GitFork
 } from 'lucide-react';
 
 const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
@@ -43,6 +44,12 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
       label: 'Human Interaction',
       icon: MessageSquare,
       description: 'Add human interaction point'
+    },
+    { 
+      type: 'decision', 
+      label: 'Decision Node',
+      icon: GitFork,
+      description: 'Route workflow based on AI agent decisions',
     },
     { 
       type: 'conversation', 

@@ -506,3 +506,27 @@
 .react-flow__background-pattern {
   color: #e2e8f0;
 }
+/* In App.css */
+.decision-node {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  will-change: transform, opacity, border-color;
+  pointer-events: all !important;
+}
+
+.decision-node.dragging {
+  opacity: 0.7;
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+.decision-node.drop-target {
+  transform: scale(1.02);
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.decision-node .drop-zone {
+  min-height: 60px;
+  transition: all 0.2s ease-in-out;
+}
