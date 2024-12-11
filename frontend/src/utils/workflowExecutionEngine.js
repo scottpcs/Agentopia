@@ -54,30 +54,76 @@ const processDecision = async (agent, input, instruction) => {
   }
 };
 
-// Helper function to generate agent instructions
-const generateAgentInstructions = (agentData, conversationMode = null) => {
-  // Get base system instructions
-  const baseInstructions = agentData.instructions?.isUsingCustom && agentData.instructions?.custom
-    ? agentData.instructions.custom
-    : generateAgentConfiguration({
-        personality: agentData.personality || {},
-        role: agentData.role || {},
-        expertise: agentData.expertise || {}
-      }).systemPrompt;
+// Helper function to process distillation using AI agents
+const processDistillation = async (agent, input, extractionFields) => {
+  console.log('Processing distillation:', {
+    agent: agent.name,
+    inputLength: input.length,
+    fieldCount: extractionFields.length
+  });
 
-  // Add role context
-  const roleContext = `You are acting as ${agentData.role?.type || 'an assistant'}.`;
-  
-  // Add conversation mode context if applicable
-  const conversationContext = conversationMode 
-    ? `\nYou are participating in a ${conversationMode} conversation with multiple agents.` 
-    : '';
-  
-  // Add any custom context or modifiers
-  const customContext = agentData.instructions?.additionalContext || '';
-  
-  // Combine all instructions
-  return `${baseInstructions}\n\n${roleContext}${conversationContext}${customContext ? '\n\n' + customContext : ''}`;
+  // Create field requirements string
+  const fieldRequirements = extractionFields
+    .map(field => `${field.label}${field.required ? ' (Required)' : ' (Optional)'}`)
+    .join('\n- ');
+
+  const systemPrompt = `
+    Your task is to extract and structure key information from the input provided.
+    Extract information for the following fields:
+    - ${fieldRequirements}
+
+    Provide your response in this format:
+    {
+      "fields": {
+        // One entry per field, matching the exact field IDs provided
+      },
+      "confidence": {
+        // Confidence score (0-1) for each field
+      },
+      "missing_required": [
+        // List of any required fields that couldn't be found
+      ],
+      "summary": "Brief summary of extracted information"
+    }
+
+    Important:
+    - Structure fields appropriately (arrays for lists, objects for complex data)
+    - Assign confidence scores based on information clarity and completeness
+    - Always include all specified fields in the response
+    - Provide "null" for fields where no information could be found
+  `;
+
+  try {
+    const response = await callOpenAI(
+      agent.apiKeyId,
+      agent.modelConfig?.model || 'gpt-4o',
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: input }
+      ],
+      agent.modelConfig?.parameters?.temperature || 0.3,
+      agent.modelConfig?.parameters?.maxTokens || 1000
+    );
+
+    console.log('Raw distillation response:', response);
+
+    let parsed;
+    try {
+      parsed = typeof response === 'string' ? JSON.parse(response) : response;
+    } catch (error) {
+      console.error('Failed to parse distillation response:', error);
+      throw new Error('Invalid response format from AI');
+    }
+
+    if (!parsed.fields || !parsed.confidence) {
+      throw new Error('Invalid response structure from AI');
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error('Error in distillation processing:', error);
+    throw error;
+  }
 };
 
 export const executeWorkflow = async (nodes, edges, onNodeChange) => {
@@ -141,38 +187,6 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
     // Otherwise, use the first node
     console.log('Using first node as start:', nodes[0]);
     return nodes[0];
-  };
-
-  const processAgent = async (agent, messageHistory, customInstructions = '') => {
-    try {
-      if (!agent.apiKeyId) {
-        throw new Error(`No API key configured for agent: ${agent.name}`);
-      }
-
-      const systemInstructions = generateAgentInstructions(agent);
-      const fullInstructions = customInstructions 
-        ? `${systemInstructions}\n\n${customInstructions}`
-        : systemInstructions;
-
-      const messages = [
-        {
-          role: 'system',
-          content: fullInstructions
-        },
-        ...messageHistory
-      ];
-
-      return await callOpenAI(
-        agent.apiKeyId,
-        agent.modelConfig?.model || 'gpt-4o',
-        messages,
-        agent.modelConfig?.parameters?.temperature || 0.7,
-        agent.modelConfig?.parameters?.maxTokens || 2048
-      );
-    } catch (error) {
-      console.error(`Error processing agent ${agent.name}:`, error);
-      throw error;
-    }
   };
 
   const processNode = async (nodeId, input = '', visited = new Set()) => {
@@ -263,10 +277,9 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
         }
   
         case 'decision': {
-          console.log('Processing Decision node - Full data:', {
+          console.log('Processing Decision node:', {
             nodeId,
             input,
-            nodeData: node.data,
             agent: node.data?.agent
           });
   
@@ -311,12 +324,7 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
             } else {
               console.warn('No matching edge found for decision:', {
                 decision: decision.decision,
-                availableEdges: nextEdges.map(e => ({
-                  id: e.id,
-                  source: e.source,
-                  target: e.target,
-                  sourceHandle: e.sourceHandle
-                }))
+                availableEdges: nextEdges
               });
             }
   
@@ -327,6 +335,194 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
             throw error;
           }
           break;
+        }
+
+        case 'distill': {
+          console.log('Processing Distill node:', {
+            nodeId,
+            input,
+            agent: node.data?.agent,
+            fields: node.data?.extractionFields
+          });
+
+          const agent = node.data?.agent;
+          if (!agent || !agent.apiKeyId) {
+            console.error('Missing agent configuration:', agent);
+            throw new Error(`No AI agent configured for distill node (${nodeId})`);
+          }
+
+          try {
+            const result = await processDistillation(
+              agent,
+              input,
+              node.data.extractionFields || []
+            );
+
+            console.log('Distillation result:', result);
+
+            // Update node state
+            onNodeChange(nodeId, {
+              lastInput: input,
+              lastOutput: result.fields,
+              summary: result.summary,
+              lastDistillation: result,
+              error: null
+            });
+
+            // Route different outputs based on handle
+            const nextEdges = edges.filter(e => e.source === nodeId);
+            for (const edge of nextEdges) {
+              if (edge.sourceHandle === 'structured') {
+                await processNode(edge.target, JSON.stringify(result.fields, null, 2), visited);
+              } else if (edge.sourceHandle === 'summary') {
+                await processNode(edge.target, result.summary, visited);
+              }
+            }
+
+            return result;
+          } catch (error) {
+            console.error('Error in distill node:', error);
+            onNodeChange(nodeId, { error: error.message });
+            throw error;
+          }
+          break;
+        }
+        
+        case 'timing': {
+          console.log('Processing Timing node:', {
+            nodeId,
+            config: node.data?.config,
+            input
+          });
+        
+          const {
+            mode = 'delay',
+            duration = 60000,
+            conditions = [],
+            resetOnActivity = false,
+            cancelOnTimeout = false
+          } = node.data?.config || {};
+        
+          try {
+            // Update node state to running
+            onNodeChange(nodeId, {
+              status: 'running',
+              lastInput: input,
+              startTime: Date.now()
+            });
+        
+            output = await new Promise((resolve, reject) => {
+              let timeoutId;
+              let conditionsMet = new Set();
+              let isTimedOut = false;
+        
+              // Set up timeout
+              timeoutId = setTimeout(() => {
+                isTimedOut = true;
+                if (mode === 'coordination' && conditionsMet.size < conditions.length) {
+                  onNodeChange(nodeId, {
+                    status: 'timeout',
+                    lastOutput: {
+                      type: 'timeout',
+                      metConditions: Array.from(conditionsMet),
+                      timestamp: Date.now()
+                    }
+                  });
+                  resolve({
+                    type: 'timeout',
+                    output: input,
+                    metConditions: Array.from(conditionsMet)
+                  });
+                } else if (mode === 'delay') {
+                  onNodeChange(nodeId, {
+                    status: 'completed',
+                    lastOutput: input
+                  });
+                  resolve({ type: 'complete', output: input });
+                } else {
+                  onNodeChange(nodeId, {
+                    status: 'timeout',
+                    lastOutput: {
+                      type: 'timeout',
+                      timestamp: Date.now()
+                    }
+                  });
+                  resolve({ type: 'timeout', output: input });
+                }
+              }, duration);
+        
+              // Set up event listeners for coordination and watchdog modes
+              if (mode === 'coordination' || mode === 'watchdog') {
+                const handleTimingEvent = (event) => {
+                  if (isTimedOut) return;
+        
+                  if (mode === 'watchdog' && event.type === 'activity') {
+                    if (resetOnActivity) {
+                      clearTimeout(timeoutId);
+                      timeoutId = setTimeout(() => {
+                        onNodeChange(nodeId, {
+                          status: 'timeout',
+                          lastOutput: {
+                            type: 'timeout',
+                            timestamp: Date.now()
+                          }
+                        });
+                        resolve({ type: 'timeout', output: input });
+                      }, duration);
+                    }
+                  } else if (mode === 'coordination' && event.type === 'condition') {
+                    conditionsMet.add(event.conditionId);
+                    
+                    onNodeChange(nodeId, {
+                      conditionsMet: Array.from(conditionsMet)
+                    });
+        
+                    if (conditions.every(c => conditionsMet.has(c))) {
+                      clearTimeout(timeoutId);
+                      onNodeChange(nodeId, {
+                        status: 'completed',
+                        lastOutput: {
+                          type: 'complete',
+                          metConditions: Array.from(conditionsMet),
+                          timestamp: Date.now()
+                        }
+                      });
+                      resolve({ type: 'complete', output: input });
+                    }
+                  }
+                };
+        
+                eventSystem.on('timing', handleTimingEvent);
+                return () => eventSystem.off('timing', handleTimingEvent);
+              }
+            });
+        
+            // Route output based on timing result
+            if (output.type === 'timeout') {
+              const timeoutEdges = edges.filter(e => 
+                e.source === nodeId && e.sourceHandle === 'timeout'
+              );
+              for (const edge of timeoutEdges) {
+                await processNode(edge.target, output.output, visited);
+              }
+            } else {
+              const completeEdges = edges.filter(e => 
+                e.source === nodeId && e.sourceHandle === 'complete'
+              );
+              for (const edge of completeEdges) {
+                await processNode(edge.target, output.output, visited);
+              }
+            }
+        
+            return output.output;
+          } catch (error) {
+            console.error('Error in timing node:', error);
+            onNodeChange(nodeId, { 
+              error: error.message,
+              status: 'error'
+            });
+            throw error;
+          }
         }
   
         case 'textInput': {
@@ -426,7 +622,7 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
               `Missing API keys for agents: ${missingApiKeys.map(a => a.name || a.id).join(', ')}`
             );
           }
-  
+
           const conversationOutput = [];
           
           switch (node.data.mode) {
@@ -439,7 +635,7 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
                 conversationOutput.push(agentResponse);
               }
               break;
-  
+
             case 'moderated':
               if (aiAgents.length > 0) {
                 const moderator = aiAgents[0];
@@ -460,7 +656,7 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
                 }
               }
               break;
-  
+
             case 'free-form':
             default:
               await Promise.all(aiAgents.map(async agent => {
@@ -472,7 +668,7 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
               }));
               break;
           }
-  
+
           output = conversationOutput.join('\n\n');
           onNodeChange(nodeId, {
             lastOutput: output,
@@ -489,7 +685,7 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
           });
           break;
         }
-  
+
         default:
           console.log(`Using default handling for node type: ${node.type}`);
           output = input;
@@ -499,7 +695,7 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
             status: 'completed'
           });
       }
-  
+
       // Process next nodes if not a decision node (decision nodes handle their own routing)
       if (node.type !== 'decision') {
         const nextEdges = edgesBySource[nodeId] || [];
@@ -511,7 +707,7 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
           await processNode(edge.target, output, visited);
         }
       }
-  
+
       return output;
     } catch (error) {
       console.error(`Error processing node ${nodeId}:`, error);
@@ -523,217 +719,93 @@ export const executeWorkflow = async (nodes, edges, onNodeChange) => {
     }
   };
 
-        const processModeratorDecision = async (moderator, input, availableAgents) => {
-          const systemInstructions = `You are a conversation moderator. Your task is to review the input and decide which agents should participate in the response.
+  const startNode = findStartNode();
+  if (!startNode) {
+    throw new Error('No valid nodes found in the workflow');
+  }
 
-          Available agents: ${availableAgents.map(a => `${a.id} (${a.role?.type || 'Unknown Role'})`).join(', ')}
+  console.log(`Starting workflow with node: ${startNode.id}`);
+  try {
+    const result = await processNode(startNode.id, '', new Set());
+    console.log('Workflow execution completed successfully');
+    return result;
+  } catch (error) {
+    console.error('Workflow execution failed:', error);
+    throw error;
+  } finally {
+    isExecutionStopped = false;
+  }
+};
 
-          Respond with a JSON array of agent IDs that should participate. For example:
-          ["agent-1", "agent-3"]`;
+export const stopWorkflowExecution = () => {
+  console.log('Stopping workflow execution');
+  isExecutionStopped = true;
+};
 
-          try {
-            const response = await callOpenAI(
-              moderator.apiKeyId,
-              moderator.modelConfig?.model || 'gpt-4o',
-              [
-                { role: 'system', content: systemInstructions },
-                { role: 'user', content: input }
-              ],
-              0.3, // Lower temperature for more consistent moderation
-              100  // Short response needed
-            );
+const processAgent = async (agent, messages) => {
+  try {
+    if (!agent.apiKeyId) {
+      throw new Error(`No API key configured for agent: ${agent.name}`);
+    }
 
-            try {
-              return JSON.parse(response);
-            } catch (error) {
-              console.warn('Failed to parse moderator response:', response);
-              return [];
-            }
-          } catch (error) {
-            console.error('Error in moderator decision:', error);
-            return [];
-          }
-        };
+    // Generate instructions based on agent configuration
+    const baseConfig = generateAgentConfiguration({
+      personality: agent.personality || {},
+      role: agent.role || {},
+      expertise: agent.expertise || {}
+    });
 
-        const processContext = async (contextInput, processingRules = []) => {
-          try {
-            if (!Array.isArray(contextInput)) {
-              console.warn('Context input is not an array, returning as is');
-              return contextInput;
-            }
+    const response = await callOpenAI(
+      agent.apiKeyId,
+      agent.modelConfig?.model || 'gpt-4o',
+      [
+        { role: 'system', content: baseConfig.systemPrompt },
+        ...messages
+      ],
+      agent.modelConfig?.parameters?.temperature || 0.7,
+      agent.modelConfig?.parameters?.maxTokens || 2048
+    );
 
-            let processedContext = [...contextInput];
+    return response;
+  } catch (error) {
+    console.error(`Error processing agent ${agent.name}:`, error);
+    throw error;
+  }
+};
 
-            for (const rule of processingRules) {
-              switch (rule.type) {
-                case 'filter':
-                  processedContext = processedContext.filter(rule.condition);
-                  break;
-                case 'transform':
-                  processedContext = processedContext.map(rule.transform);
-                  break;
-                case 'summarize':
-                  // Implement AI-based summarization if needed
-                  break;
-                default:
-                  console.warn(`Unknown processing rule type: ${rule.type}`);
-              }
-            }
+const processModeratorDecision = async (moderator, input, availableAgents) => {
+  try {
+    const response = await callOpenAI(
+      moderator.apiKeyId,
+      moderator.modelConfig?.model || 'gpt-3.5-turbo',
+      [
+        {
+          role: 'system',
+          content: `You are a conversation moderator. Review the context and decide which agents should respond.
+          Available agents: ${availableAgents.map(a => `${a.id} (${a.role?.type || 'Unknown Role'})`).join(', ')}.
+          Respond with a JSON array of agent IDs that should participate.`
+        },
+        ...messages.map(m => ({
+          role: m.role,
+          content: m.content
+        }))
+      ],
+      0.3,
+      100
+    );
 
-            return processedContext;
-          } catch (error) {
-            console.error('Error processing context:', error);
-            return contextInput;
-          }
-        };
+    try {
+      return JSON.parse(response);
+    } catch {
+      return [];
+    }
+  } catch (error) {
+    console.error('Error in moderator decision:', error);
+    return [];
+  }
+};
 
-        const startNode = findStartNode();
-        if (!startNode) {
-          throw new Error('No valid nodes found in the workflow');
-        }
-
-        console.log(`Starting workflow with node: ${startNode.id}`);
-        try {
-          const result = await processNode(startNode.id, '', new Set());
-          console.log('Workflow execution completed successfully');
-          return result;
-        } catch (error) {
-          console.error('Workflow execution failed:', error);
-          throw error;
-        } finally {
-          isExecutionStopped = false;
-        }
-        };
-
-        export const stopWorkflowExecution = () => {
-        console.log('Stopping workflow execution');
-        isExecutionStopped = true;
-        };
-
-        // Helper function to validate node configuration
-        export const validateNodeConfiguration = (node) => {
-        if (!node) return false;
-
-        switch (node.type) {
-          case 'aiAgent':
-            return !!(node.data?.modelConfig?.model && 
-                      (node.data?.apiKeyId || node.data?.modelConfig?.apiKeyId));
-          
-          case 'decision':
-            return !!(node.data?.agent?.apiKeyId && 
-                      node.data?.decisionInstruction &&
-                      node.data?.outputs?.output1 &&
-                      node.data?.outputs?.output2);
-          
-          case 'humanInteraction':
-            return true; // Human interaction nodes don't require special configuration
-          
-          case 'textInput':
-            return true; // Text input nodes are always valid
-          
-          case 'textOutput':
-            return true; // Text output nodes are always valid
-          
-          case 'contextProcessor':
-            return true; // Context processor nodes don't require special configuration
-          
-          case 'conversation':
-            if (!node.data?.agents || node.data.agents.length === 0) return false;
-            return node.data.agents
-              .filter(agent => agent.type === 'ai')
-              .every(agent => !!(agent.apiKeyId || agent.modelConfig?.apiKeyId));
-          
-          default:
-            return false;
-        }
-        };
-
-        // Helper function to get node status
-        export const getNodeStatus = (node) => {
-        if (!node?.data) return 'unknown';
-
-        if (node.data.error) return 'error';
-        if (node.data.status) return node.data.status;
-        if (node.data.waitingForInput) return 'waiting';
-        if (node.data.lastOutput !== undefined) return 'completed';
-
-        return 'pending';
-        };
-
-        // Helper function to check if a workflow is valid
-        export const validateWorkflow = (nodes, edges) => {
-        if (!nodes.length) return { valid: false, error: 'Workflow has no nodes' };
-
-        // Check for invalid node configurations
-        const invalidNodes = nodes.filter(node => !validateNodeConfiguration(node));
-        if (invalidNodes.length > 0) {
-          return { 
-            valid: false, 
-            error: `Invalid node configurations: ${invalidNodes.map(n => n.id).join(', ')}` 
-          };
-        }
-
-        // Check for circular dependencies
-        const visited = new Set();
-        const recursionStack = new Set();
-
-        const hasCycle = (nodeId) => {
-          visited.add(nodeId);
-          recursionStack.add(nodeId);
-
-          const outgoingEdges = edges.filter(e => e.source === nodeId);
-          for (const edge of outgoingEdges) {
-            if (!visited.has(edge.target)) {
-              if (hasCycle(edge.target)) return true;
-            } else if (recursionStack.has(edge.target)) {
-              return true;
-            }
-          }
-
-          recursionStack.delete(nodeId);
-          return false;
-        };
-
-        const startNodes = nodes.filter(node => 
-          !edges.some(edge => edge.target === node.id)
-        );
-
-        for (const startNode of startNodes) {
-          if (hasCycle(startNode.id)) {
-            return { valid: false, error: 'Workflow contains circular dependencies' };
-          }
-        }
-
-        // Check for disconnected nodes
-        const connectedNodes = new Set();
-        const addConnectedNodes = (nodeId) => {
-          connectedNodes.add(nodeId);
-          edges
-            .filter(e => e.source === nodeId)
-            .forEach(e => {
-              if (!connectedNodes.has(e.target)) {
-                addConnectedNodes(e.target);
-              }
-            });
-        };
-
-        startNodes.forEach(node => addConnectedNodes(node.id));
-        const disconnectedNodes = nodes.filter(node => !connectedNodes.has(node.id));
-
-        if (disconnectedNodes.length > 0) {
-          return { 
-            valid: false, 
-            error: `Disconnected nodes found: ${disconnectedNodes.map(n => n.id).join(', ')}` 
-          };
-        }
-
-        return { valid: true };
-        };
-
-        export default {
-        executeWorkflow,
-        stopWorkflowExecution,
-        validateNodeConfiguration,
-        getNodeStatus,
-        validateWorkflow
-        };
+export default {
+  executeWorkflow,
+  stopWorkflowExecution
+};

@@ -10,7 +10,9 @@ import {
   MessageCircle,
   Users,
   Grip, 
-  GitFork
+  GitFork,
+  FileText,  // Added for DistillNode
+  Clock  // Add this import
 } from 'lucide-react';
 
 const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
@@ -56,6 +58,18 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
       label: 'Multi-Agent Conversation',
       icon: Users,
       description: 'Create a conversation between multiple agents'
+    },
+    { 
+      type: 'distill', 
+      label: 'Information Extraction',
+      icon: FileText,
+      description: 'Extract and structure key information from text',
+    },
+    { 
+      type: 'timing', 
+      label: 'Timing Control',
+      icon: Clock,
+      description: 'Control workflow timing and synchronization'
     }
   ];
 
@@ -85,6 +99,17 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
           type: nodeType.type === 'aiAgent' ? 'ai' : nodeType.type
         }
       };
+
+      // Add specific data for distill node
+      if (nodeType.type === 'distill') {
+        dragData.data.extractionFields = [
+          { id: 'requirements', label: 'Requirements', required: true },
+          { id: 'scope', label: 'Project Scope', required: true },
+          { id: 'budget', label: 'Budget Constraints', required: false },
+          { id: 'timeline', label: 'Timeline Requirements', required: true },
+          { id: 'success_criteria', label: 'Success Criteria', required: false }
+        ];
+      }
     }
   
     event.dataTransfer.setData('application/reactflow', JSON.stringify(dragData));
@@ -179,7 +204,6 @@ const Sidebar = ({ agents = [], onAddAgent, onCreateAgent }) => {
   );
 };
 
-// PropTypes for better development experience
 Sidebar.propTypes = {
   agents: PropTypes.arrayOf(
     PropTypes.shape({

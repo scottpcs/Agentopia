@@ -7,6 +7,8 @@ import { Cross2Icon } from '@radix-ui/react-icons';
 import { generateAgentConfiguration } from '../utils/agentConfigConverter';
 import { validateModelConfig, MODEL_CONFIGS } from '../utils/modelConfigUtils';
 import { estimateTokenUsage } from '../services/openaiService';
+import { Clock, X } from 'lucide-react';
+import { TIMING_MODES } from "./TimingNode";
 
 const MODEL_OPTIONS = [
   { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
@@ -21,6 +23,169 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
   const [error, setError] = useState('');
   const [showInstructions, setShowInstructions] = useState(false);
   const [localApiKey, setLocalApiKey] = useState(node.data?.apiKeyId || '');
+
+  // Add new state for timing node properties
+    const [durationValue, setDurationValue] = useState(() => {
+      if (node.type === 'timing') {
+        const duration = node.data?.config?.duration || 60000;
+        const mode = node.data?.config?.mode || 'delay';
+        return Math.floor(duration / (mode === 'watchdog' ? 60000 : 1000));
+      }
+      return 0;
+    });
+  
+    const [durationUnit, setDurationUnit] = useState(() => {
+      if (node.type === 'timing') {
+        const mode = node.data?.config?.mode || 'delay';
+        return mode === 'watchdog' ? 60000 : 1000;
+      }
+      return 1000;
+    });
+  
+    // Then modify the renderTimingNodeProperties function to use the state from above
+    const renderTimingNodeProperties = () => {
+      const {
+        mode = 'delay',
+        duration = 60000,
+        resetOnActivity = false,
+        cancelOnTimeout = false,
+        conditions = []
+      } = node.data?.config || {};
+  
+      const durationUnits = [
+        { value: 1000, label: 'Seconds' },
+        { value: 60000, label: 'Minutes' },
+        { value: 3600000, label: 'Hours' },
+        { value: 86400000, label: 'Days' }
+      ];
+  
+      const updateConfig = (updates) => {
+        onChange(node.id, {
+          config: {
+            ...node.data.config,
+            ...updates
+          }
+        });
+      };
+  
+      return (
+        <div className="space-y-6">
+          <div>
+            <Label>Timing Mode</Label>
+            <select
+              value={mode}
+              onChange={(e) => updateConfig({ mode: e.target.value })}
+              className="w-full mt-1 p-2 border rounded-md"
+            >
+              {Object.entries(TIMING_MODES).map(([value, { label, description }]) => (
+                <option key={value} value={value} title={description}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-gray-500 mt-1">
+              {TIMING_MODES[mode].description}
+            </p>
+          </div>
+  
+          <div>
+            <Label>Duration</Label>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min="1"
+                value={durationValue}
+                onChange={(e) => {
+                  const newValue = parseInt(e.target.value);
+                  setDurationValue(newValue);
+                  updateConfig({ duration: newValue * durationUnit });
+                }}
+                className="w-1/2"
+              />
+              <select
+                value={durationUnit}
+                onChange={(e) => {
+                  const newUnit = parseInt(e.target.value);
+                  setDurationUnit(newUnit);
+                  updateConfig({ duration: durationValue * newUnit });
+                }}
+                className="w-1/2 p-2 border rounded-md"
+              >
+                {durationUnits.map(unit => (
+                  <option key={unit.value} value={unit.value}>
+                    {unit.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+  
+          {/* Rest of the timing node properties remain the same */}
+          {mode === 'watchdog' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="resetOnActivity"
+                checked={resetOnActivity}
+                onChange={(e) => updateConfig({ resetOnActivity: e.target.checked })}
+              />
+              <Label htmlFor="resetOnActivity">Reset timer on activity</Label>
+            </div>
+          )}
+  
+          {mode === 'coordination' && (
+            <div>
+              <Label>Required Conditions</Label>
+              <div className="space-y-2 mt-2">
+                {conditions.map((condition, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <Input
+                      value={condition}
+                      onChange={(e) => {
+                        const newConditions = [...conditions];
+                        newConditions[index] = e.target.value;
+                        updateConfig({ conditions: newConditions });
+                      }}
+                      placeholder={`Condition ${index + 1}`}
+                      className="flex-grow"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const newConditions = conditions.filter((_, i) => i !== index);
+                        updateConfig({ conditions: newConditions });
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    updateConfig({ conditions: [...conditions, ''] });
+                  }}
+                >
+                  Add Condition
+                </Button>
+              </div>
+            </div>
+          )}
+  
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="cancelOnTimeout"
+              checked={cancelOnTimeout}
+              onChange={(e) => updateConfig({ cancelOnTimeout: e.target.checked })}
+            />
+            <Label htmlFor="cancelOnTimeout">Cancel on timeout</Label>
+          </div>
+        </div>
+      );
+    };
 
   // Sync local state with node data
   useEffect(() => {
@@ -150,8 +315,13 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
     );
   };
 
+
+
   const renderContent = () => {
     switch (node.type) {
+      case 'timing':
+        return renderTimingNodeProperties(node, onChange);
+
       case 'aiAgent':
         return (
           <>
@@ -198,6 +368,147 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
             </div>
           </>
         );
+
+        case 'distill':
+          return (
+            <div className="space-y-6">
+              <div>
+                <Label htmlFor="name">Node Name</Label>
+                <Input
+                  id="name"
+                  value={node.data?.label || ''}
+                  onChange={(e) => onChange(node.id, { 
+                    ...node.data,
+                    label: e.target.value 
+                  })}
+                  className="mt-1"
+                />
+              </div>
+        
+              <div>
+              <Label className="flex justify-between">
+          Extraction Fields
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const newFields = [
+                ...(node.data?.extractionFields || []),
+                {
+                  id: `field_${Date.now()}`,
+                  label: 'New Field',
+                  required: false
+                }
+              ];
+              onChange(node.id, { 
+                ...node.data,
+                extractionFields: newFields
+              });
+            }}
+          >
+            Add Field
+          </Button>
+        </Label>
+        
+        <div className="space-y-2 mt-2">
+          {(node.data?.extractionFields || []).map((field, index) => (
+            <Card key={field.id} className="p-3">
+              <div className="space-y-2">
+                <div>
+                  <Label>Field Label</Label>
+                  <Input
+                    value={field.label}
+                    onChange={(e) => {
+                      const newFields = [...(node.data?.extractionFields || [])];
+                      newFields[index] = {
+                        ...newFields[index],
+                        label: e.target.value
+                      };
+                      onChange(node.id, { 
+                        ...node.data,
+                        extractionFields: newFields
+                      });
+                    }}
+                    placeholder="Enter field label"
+                  />
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id={`required-${field.id}`}
+                    checked={field.required}
+                    onChange={(e) => {
+                      const newFields = [...(node.data?.extractionFields || [])];
+                      newFields[index] = {
+                        ...newFields[index],
+                        required: e.target.checked
+                      };
+                      onChange(node.id, { 
+                        ...node.data,
+                        extractionFields: newFields
+                      });
+                    }}
+                    className="rounded border-gray-300"
+                  />
+                  <Label htmlFor={`required-${field.id}`}>Required Field</Label>
+                  
+                  <div className="flex-grow"></div>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => {
+                      const newFields = (node.data?.extractionFields || [])
+                        .filter((_, i) => i !== index);
+                      onChange(node.id, { 
+                        ...node.data,
+                        extractionFields: newFields
+                      });
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {node.data?.lastDistillation && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Last Extraction Results</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm bg-gray-50 p-2 rounded">
+              <pre className="whitespace-pre-wrap">
+                {JSON.stringify(node.data.lastDistillation.fields, null, 2)}
+              </pre>
+            </div>
+            {node.data.lastDistillation.missing_required?.length > 0 && (
+              <div className="mt-2 text-amber-600 text-sm">
+                Missing required fields: {node.data.lastDistillation.missing_required.join(', ')}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {node.data?.error && (
+        <Card className="border-red-200">
+          <CardContent className="pt-4">
+            <Label className="text-red-600">Error</Label>
+            <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">
+              {node.data.error}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 
         // Updates to the renderContent() method in PropertyPanel.jsx, textInput case:
 

@@ -530,3 +530,301 @@
   min-height: 60px;
   transition: all 0.2s ease-in-out;
 }
+
+/* Add to App.css */
+
+/* DistillNode specific styles */
+.distill-node {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  will-change: transform, opacity, border-color;
+  pointer-events: all !important;
+}
+
+.distill-node.dragging {
+  opacity: 0.7;
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+.distill-node.drop-target {
+  transform: scale(1.02);
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Field list styles */
+.field-list {
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 #f8fafc;
+}
+
+.field-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.field-list::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.field-list::-webkit-scrollbar-thumb {
+  background-color: #e2e8f0;
+  border-radius: 3px;
+}
+
+/* Extraction field styles */
+.extraction-field {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.extraction-field:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.extraction-field.required {
+  border-left: 3px solid #3b82f6;
+}
+
+/* Confidence indicator styles */
+.confidence-indicator {
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.confidence-indicator-bar {
+  height: 100%;
+  transition: width 0.3s ease-in-out;
+}
+
+.confidence-high {
+  background-color: #22c55e;
+}
+
+.confidence-medium {
+  background-color: #eab308;
+}
+
+.confidence-low {
+  background-color: #ef4444;
+}
+
+/* Results display styles */
+.results-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.result-item {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.result-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* Animation styles */
+.distill-node .expand-transition {
+  transition: max-height 0.3s ease-in-out;
+  overflow: hidden;
+}
+
+/* Processing indicator styles */
+.processing-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  z-index: 10;
+}
+
+.processing-spinner {
+  border: 3px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Handle styles */
+.distill-node .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #64748b;
+  border: 2px solid white;
+}
+
+.distill-node .react-flow__handle:hover {
+  background-color: #3b82f6;
+}
+
+.timing-node {
+  transition: all 0.2s ease-in-out;
+}
+
+.timing-node.running {
+  border-color: #3b82f6;
+}
+
+.timing-node.timeout {
+  border-color: #ef4444;
+}
+
+.timing-node.completed {
+  border-color: #22c55e;
+}
+
+/* Handle label styles */
+.handle-label {
+  position: absolute;
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+/* Error message styles */
+.error-message {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin-top: 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.error-message svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+/* ---------- Timing Node Styles ---------- */
+.timing-node {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  will-change: transform, opacity, border-color;
+  pointer-events: all !important;
+}
+
+.timing-node.running {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.timing-node.timeout {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.timing-node.completed {
+  border-color: #22c55e;
+  background-color: #f0fdf4;
+}
+
+.timing-node .countdown {
+  font-family: monospace;
+  font-size: 1.125rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.5rem;
+  background-color: #f8fafc;
+  border-radius: 0.375rem;
+  margin: 0.5rem 0;
+}
+
+.timing-node .status-indicator {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.timing-node .status-indicator.running {
+  background-color: #3b82f6;
+  animation: pulse 2s infinite;
+}
+
+.timing-node .status-indicator.timeout {
+  background-color: #ef4444;
+}
+
+.timing-node .status-indicator.completed {
+  background-color: #22c55e;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+  
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.timing-node .condition-list {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background-color: #f8fafc;
+  border-radius: 0.375rem;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.timing-node .condition-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.timing-node .condition-item.met {
+  color: #22c55e;
+}
+
+.timing-node .condition-item.pending {
+  color: #6b7280;
+}

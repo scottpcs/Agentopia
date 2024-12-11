@@ -1,5 +1,4 @@
 // src/components/nodeTypes.jsx
-
 import AIAgentNode from './AIAgentNode';
 import HumanInteractionNode from './HumanInteractionNode';
 import TextInputNode from './TextInputNode';
@@ -7,6 +6,7 @@ import TextOutputNode from './TextOutputNode';
 import ConversationNode from './ConversationNode';
 import ContextProcessorNode from './ContextProcessorNode';
 import DecisionNode from './DecisionNode';
+import TimingNode from './TimingNode';
 
 // Node type definitions
 export const nodeTypes = {
@@ -17,10 +17,9 @@ export const nodeTypes = {
   textOutput: TextOutputNode,
   conversation: ConversationNode,
   contextProcessor: ContextProcessorNode,
-  decision: DecisionNode
+  decision: DecisionNode,
+  timing: TimingNode
 };
-
-
 
 // Store the extended configurations separately
 export const nodeConfigs = {
@@ -60,6 +59,24 @@ export const nodeConfigs = {
           selectedSkills: [],
           certainty: 50,
           responsibilityScope: 50
+        }
+      }
+    }
+  },
+  timing: {
+    defaultName: 'Timing Control',
+    defaults: {
+      width: 200,
+      height: 150,
+      data: {
+        name: 'Timing Control',
+        type: 'timing',
+        config: {
+          mode: 'delay',
+          duration: 60000,
+          resetOnActivity: false,
+          cancelOnTimeout: false,
+          conditions: []
         }
       }
     }

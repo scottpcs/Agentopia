@@ -10,11 +10,18 @@ import {
   ArrowRightLeft,
   Users,
   Workflow,
-  GitFork // Added for decision node icon
+  GitFork,
+  FileText,
+  Database,
+  Braces,
+  Filter,
+  Layers,
+  Clock // Added Clock icon for TimingNode
 } from 'lucide-react';
 
 const NodePalette = ({ onDragStart }) => {
   const nodeTypes = [
+    // Basic Nodes
     {
       type: 'textInput',
       label: 'Text Input',
@@ -37,6 +44,8 @@ const NodePalette = ({ onDragStart }) => {
         text: '',
       }
     },
+
+    // Agent Nodes
     {
       type: 'aiAgent',
       label: 'AI Agent',
@@ -87,6 +96,8 @@ const NodePalette = ({ onDragStart }) => {
         instructions: 'Please provide input as needed.',
       }
     },
+
+    // Collaboration Nodes
     {
       type: 'conversation',
       label: 'Multi-Agent Conversation',
@@ -104,6 +115,20 @@ const NodePalette = ({ onDragStart }) => {
         }
       }
     },
+    {
+      type: 'humanInteraction',
+      label: 'Human Interaction',
+      icon: MessagesSquare,
+      description: 'Add point of human interaction and input',
+      category: 'Collaboration',
+      data: {
+        name: 'Human Interaction',
+        instructions: 'Please provide your input.',
+        context: [],
+      }
+    },
+
+    // Control Nodes
     {
       type: 'decision',
       label: 'Decision Node',
@@ -125,16 +150,41 @@ const NodePalette = ({ onDragStart }) => {
         }
       }
     },
+
     {
-      type: 'humanInteraction',
-      label: 'Human Interaction',
-      icon: MessagesSquare,
-      description: 'Add point of human interaction and input',
-      category: 'Collaboration',
+      type: 'timing',
+      label: 'Timing Control',
+      icon: Clock,
+      description: 'Control workflow timing and synchronization',
+      category: 'Control',
       data: {
-        name: 'Human Interaction',
-        instructions: 'Please provide your input.',
-        context: [],
+        label: 'Timing Control',
+        config: {
+          mode: 'delay',
+          duration: 60000,
+          resetOnActivity: false,
+          cancelOnTimeout: false,
+          conditions: []
+        }
+      }
+    },
+    
+    // Analysis Nodes
+    {
+      type: 'distill',
+      label: 'Information Extraction',
+      icon: FileText,
+      description: 'Extract and structure key information from text',
+      category: 'Analysis',
+      data: {
+        label: 'Information Extraction',
+        extractionFields: [
+          { id: 'requirements', label: 'Requirements', required: true },
+          { id: 'scope', label: 'Project Scope', required: true },
+          { id: 'budget', label: 'Budget Constraints', required: false },
+          { id: 'timeline', label: 'Timeline Requirements', required: true },
+          { id: 'success_criteria', label: 'Success Criteria', required: false }
+        ]
       }
     },
     {
@@ -142,11 +192,49 @@ const NodePalette = ({ onDragStart }) => {
       label: 'Context Processor',
       icon: ArrowRightLeft,
       description: 'Process and transform conversation context',
-      category: 'Advanced',
+      category: 'Analysis',
       data: {
         label: 'Context Processor',
         processingRules: [],
         transformations: {}
+      }
+    },
+
+    // Advanced Nodes
+    {
+      type: 'database',
+      label: 'Database Operation',
+      icon: Database,
+      description: 'Store and retrieve structured data',
+      category: 'Advanced',
+      data: {
+        label: 'Database Operation',
+        operation: 'query',
+        config: {}
+      }
+    },
+    {
+      type: 'jsonTransform',
+      label: 'JSON Transform',
+      icon: Braces,
+      description: 'Transform and validate JSON data',
+      category: 'Advanced',
+      data: {
+        label: 'JSON Transform',
+        schema: {},
+        transformRules: []
+      }
+    },
+    {
+      type: 'filter',
+      label: 'Data Filter',
+      icon: Filter,
+      description: 'Filter and validate data streams',
+      category: 'Advanced',
+      data: {
+        label: 'Data Filter',
+        filterRules: [],
+        validation: {}
       }
     },
     {
@@ -161,7 +249,35 @@ const NodePalette = ({ onDragStart }) => {
         inputMapping: {},
         outputMapping: {}
       }
+    },
+    {
+      type: 'aggregator',
+      label: 'Data Aggregator',
+      icon: Layers,
+      description: 'Combine data from multiple sources',
+      category: 'Advanced',
+      data: {
+        label: 'Data Aggregator',
+        aggregationRules: [],
+        mergeStrategy: 'union'
+      }
+    },
+    {
+      type: 'timing',
+      label: 'Timing Control',
+      icon: Clock,
+      description: 'Control workflow timing and synchronization',
+      category: 'Control',
+      data: {
+        config: {
+          mode: 'delay',
+          duration: 60000,
+          resetOnActivity: false,
+          cancelOnTimeout: false
+        }
+      }
     }
+
   ];
 
   // Group nodes by category
@@ -174,7 +290,7 @@ const NodePalette = ({ onDragStart }) => {
   }, {});
 
   // Define category order
-  const categoryOrder = ['Basic', 'Agents', 'Control', 'Collaboration', 'Advanced'];
+  const categoryOrder = ['Basic', 'Agents', 'Control', 'Collaboration', 'Analysis', 'Advanced'];
 
   const handleDragStart = (event, nodeType) => {
     event.dataTransfer.setData('application/reactflow', JSON.stringify(nodeType));
