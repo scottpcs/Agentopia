@@ -227,6 +227,18 @@ const TimingNode = ({ id, data, isConnectable }) => {
         )}
       </Card>
 
+          {/* Add the lastOutput display here */}
+          {data.lastOutput && (
+            <div className="text-xs mb-2 p-2 bg-gray-100 rounded">
+              Last output: {
+                typeof data.lastOutput === 'object'
+                  ? JSON.stringify(data.lastOutput)
+                  : data.lastOutput
+              }
+            </div>
+          )}
+
+
       {status === 'timeout' && (
         <div className="flex items-center gap-2 text-red-500 mb-4">
           <AlertCircle className="w-4 h-4" />

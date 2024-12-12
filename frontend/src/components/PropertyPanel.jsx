@@ -183,6 +183,35 @@ const PropertyPanel = ({ node, onChange, onClose, apiKeys = [] }) => {
             />
             <Label htmlFor="cancelOnTimeout">Cancel on timeout</Label>
           </div>
+          {/* Status Display Section */}
+          {node.data?.status && (
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+              <div className="text-sm font-medium">Current Status: {node.data.status}</div>
+              {node.data.startTime && (
+                <div className="text-sm text-gray-500">
+                  Started: {new Date(node.data.startTime).toLocaleString()}
+                </div>
+              )}
+              {node.data.lastOutput && (
+                <div className="text-sm text-gray-500">
+                  Last Output: 
+                  {typeof node.data.lastOutput === 'object' ? (
+                    <div className="mt-1">
+                      <div>Type: {node.data.lastOutput.type}</div>
+                      <div>Time: {new Date(node.data.lastOutput.timestamp).toLocaleString()}</div>
+                    </div>
+                  ) : (
+                    node.data.lastOutput
+                  )}
+                </div>
+              )}
+              {Array.isArray(node.data.conditionsMet) && (
+                <div className="text-sm text-gray-500">
+                  Conditions met: {node.data.conditionsMet.length}/{conditions.length}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
     };
