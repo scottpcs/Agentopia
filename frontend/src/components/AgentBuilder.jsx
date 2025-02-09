@@ -25,12 +25,26 @@ import { generateAgentConfiguration } from '../utils/agentConfigConverter';
 import ModelConfig from './ModelConfig';
 
 const MODEL_OPTIONS = [
-  { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
-  { value: 'gpt-4o-mini', label: 'GPT-4o mini', description: 'Affordable and intelligent small model for fast, lightweight tasks' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'The latest GPT-4 Turbo model with vision capabilities' },
-  { value: 'gpt-4', label: 'GPT-4', description: 'Powerful model for complex tasks, 8k context window' },
-  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Fast, inexpensive model for many tasks' },
-  { value: 'gpt-3.5-turbo-16k', label: 'GPT-3.5 Turbo 16k', description: 'GPT-3.5 Turbo with extended 16k token context' }
+  { 
+    value: 'gpt-4o-mini', 
+    label: 'GPT-4o Mini', 
+    description: 'Cost-effective model for most tasks ($0.15/1M tokens)' 
+  },
+  { 
+    value: 'o3-mini', 
+    label: 'O3 Mini', 
+    description: 'Advanced model with improved capabilities ($1.10/1M tokens)' 
+  },
+  { 
+    value: 'o1-mini', 
+    label: 'O1 Mini', 
+    description: 'Powerful model for specialized tasks ($1.10/1M tokens)' 
+  },
+  { 
+    value: 'gpt-4o', 
+    label: 'GPT-4o', 
+    description: 'High-intelligence flagship model for complex tasks ($2.50/1M tokens)' 
+  }
 ];
 
 // Personality trait definitions

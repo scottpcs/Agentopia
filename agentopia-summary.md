@@ -251,7 +251,7 @@ Multiple Agent Instances: (implemented, but needs cleanup)
 Multi-Agent Conversations: (implemented but needs clean-up on API handling. Agents should have API already assigned)
 - Develop a new node type or property setting to support multi-agent conversations
 
-Conditional Workflow Control: (created a basic decision node)
+Conditional Workflow Control: (created a basic decision node, distill and timing node)
 - Implement conditional conversation entrance and exit
 - Add workflow branching capabilities
 

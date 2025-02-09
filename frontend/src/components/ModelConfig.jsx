@@ -53,12 +53,26 @@ const MODEL_CONFIGS = {
 };
 
 const MODEL_OPTIONS = [
-  { value: 'gpt-4o', label: 'GPT-4o', description: 'High-intelligence flagship model for complex, multi-step tasks' },
-  { value: 'gpt-4o-mini', label: 'GPT-4o mini', description: 'Affordable and intelligent small model for fast, lightweight tasks' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'Latest GPT-4 model with improved capabilities' },
-  { value: 'gpt-4', label: 'GPT-4', description: 'Advanced model for complex tasks' },
-  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Fast and efficient for most tasks' },
-  { value: 'gpt-3.5-turbo-16k', label: 'GPT-3.5 Turbo 16K', description: 'Extended context version of GPT-3.5' }
+  { 
+    value: 'gpt-4o-mini', 
+    label: 'GPT-4o Mini', 
+    description: 'Cost-effective model for most tasks ($0.15/1M tokens)' 
+  },
+  { 
+    value: 'o3-mini', 
+    label: 'O3 Mini', 
+    description: 'Advanced model with improved capabilities ($1.10/1M tokens)' 
+  },
+  { 
+    value: 'o1-mini', 
+    label: 'O1 Mini', 
+    description: 'Powerful model for specialized tasks ($1.10/1M tokens)' 
+  },
+  { 
+    value: 'gpt-4o', 
+    label: 'GPT-4o', 
+    description: 'High-intelligence flagship model for complex tasks ($2.50/1M tokens)' 
+  }
 ];
 
 const ModelConfig = ({ config, onChange, apiKeys = [], error }) => {

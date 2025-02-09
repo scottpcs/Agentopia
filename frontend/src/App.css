@@ -828,3 +828,62 @@
 .timing-node .condition-item.pending {
   color: #6b7280;
 }
+.conversation-node {
+  width: 400px !important;
+  max-width: 600px;
+  transition: all 0.2s ease-in-out;
+}
+
+.conversation-node .max-h-96 {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.conversation-node .max-h-96::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.conversation-node .max-h-96::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.conversation-node .max-h-96::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.conversation-node .max-h-96::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.conversation-node .drop-zone {
+  border: 2px dashed #e5e7eb;
+  padding: 1rem;
+  margin: 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease-in-out;
+  min-height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f9fafb;
+}
+
+.conversation-node .drop-zone.active-drop-target {
+  border-color: #3b82f6;
+  background-color: #dbeafe;
+  transform: scale(1.02);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.conversation-node .agent-item {
+  transition: all 0.15s ease-in-out;
+}
+
+.conversation-node .agent-item:hover {
+  background-color: #f3f4f6;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}

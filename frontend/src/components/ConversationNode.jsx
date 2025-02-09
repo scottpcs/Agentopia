@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Handle, Position, useReactFlow } from 'reactflow';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Handle, Position } from 'reactflow';
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -19,9 +19,28 @@ import {
   Plus,
   Grip
 } from 'lucide-react';
-import PropertyPanel from './PropertyPanel';
 
-// Helper function to handle role display
+// Format conversation output for text output node
+const formatConversationOutput = (messages) => {
+  if (!Array.isArray(messages)) return '';
+  
+  return messages
+    .map(message => {
+      // Ensure we're working with string content
+      const content = typeof message.content === 'object' ? 
+        message.content.content || JSON.stringify(message.content) : 
+        message.content;
+
+      const prefix = message.senderName ? 
+        (message.role ? `${message.senderName} (${message.role}): ` : `${message.senderName}: `) :
+        '';
+      
+      return `${prefix}${content}`;
+    })
+    .join('\n\n');
+};
+
+// Helper function to get role display text
 const getRoleDisplay = (role) => {
   if (!role) return 'No role defined';
   if (typeof role === 'string') return role;
@@ -34,14 +53,41 @@ const getRoleDisplay = (role) => {
   return 'Unknown Role';
 };
 
+// Message component for rendering individual messages
+const Message = ({ message, participants }) => {
+  const participant = participants.find(p => p.id === message.senderId);
+  const isAI = participant?.type === 'ai';
+
+  // Extract message content
+  const content = typeof message.content === 'object' 
+    ? message.content.content || JSON.stringify(message.content)
+    : message.content;
+
+  return (
+    <div className={`mb-2 p-2 rounded-lg ${
+      isAI ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+    }`}>
+      <div className="flex items-center gap-2 mb-1">
+        {isAI ? <Bot className="w-4 h-4 text-blue-500" /> : 
+                <User className="w-4 h-4 text-gray-500" />}
+        <span className="font-medium text-sm">
+          {participant?.name || message.senderName || 'Unknown'} 
+          {(participant?.role || message.role) && (
+            <span className="text-gray-500 ml-1">
+              ({participant?.role?.type || message.role || 'No role'})
+            </span>
+          )}
+        </span>
+        <span className="text-xs text-gray-500 ml-auto">
+          {new Date(message.timestamp).toLocaleTimeString()}
+        </span>
+      </div>
+      <div className="text-sm whitespace-pre-wrap">{content}</div>
+    </div>
+  );
+};
+
 const ConversationNode = ({ id, data, isConnectable }) => {
-  // React Flow instance and refs
-  const reactFlowInstance = useReactFlow();
-  const nodeRef = useRef(null);
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
-  const dropZoneRef = useRef(null);
-  
   // State declarations
   const [expanded, setExpanded] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -50,12 +96,17 @@ const ConversationNode = ({ id, data, isConnectable }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDraggingNode, setIsDraggingNode] = useState(false);
   const [isDropZoneActive, setIsDropZoneActive] = useState(false);
-  const [messages, setMessages] = useState([]);
   const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [showParticipantConfig, setShowParticipantConfig] = useState(false);
   const [error, setError] = useState(null);
   const [draggedNodeType, setDraggedNodeType] = useState(null);
   const [dragSourceType, setDragSourceType] = useState(null);
+
+  // Refs
+  const nodeRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const dropZoneRef = useRef(null);
 
   // Memoized values
   const participants = useMemo(() => data?.agents || [], [data?.agents]);
@@ -63,61 +114,131 @@ const ConversationNode = ({ id, data, isConnectable }) => {
   const allowHumanParticipation = useMemo(() => data?.allowHumanParticipation !== false, [data?.allowHumanParticipation]);
   const turnManagement = useMemo(() => data?.turnManagement || 'dynamic', [data?.turnManagement]);
   const contextHandling = useMemo(() => data?.contextHandling || 'cumulative', [data?.contextHandling]);
+  const messages = useMemo(() => data?.messages || [], [data?.messages]);
 
-  // Add a participant to the conversation
-  const handleAddParticipant = useCallback((agent) => {
-    if (data?.onChange && !participants.some(p => p.id === agent.id)) {
-      const availableApiKeys = data.apiKeys || [];
-      const defaultApiKey = availableApiKeys.length > 0 ? availableApiKeys[0].name : null;
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-      const agentWithDefaults = {
-        ...agent,
-        id: `${agent.id || 'agent'}-${Date.now()}`,
-        apiKeyId: agent.apiKeyId || data.apiKeyId || defaultApiKey,
-        modelConfig: agent.modelConfig || {
-          model: 'gpt-4o',
-          provider: 'openai',
-          parameters: {
-            temperature: 0.7,
-            maxTokens: 2048
-          }
-        },
-        type: agent.type || 'ai',
-        name: agent.name || 'New Agent',
-        instructions: agent.instructions || 'You are a helpful assistant.'
-      };
-
-      console.log('Adding participant with config:', {
-        id: agentWithDefaults.id,
-        name: agentWithDefaults.name,
-        apiKeyId: agentWithDefaults.apiKeyId,
-        model: agentWithDefaults.modelConfig.model
+  // Message handling
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || isProcessing) return;
+  
+    const updatedMessages = [...messages];
+    
+    // Add user message
+    const userMessage = {
+      id: Date.now(),
+      senderId: 'user',
+      senderName: 'User',
+      role: 'user',
+      content: inputMessage,
+      timestamp: new Date().toISOString()
+    };
+    
+    updatedMessages.push(userMessage);
+  
+    // Update state with new message
+    if (data?.onChange) {
+      data.onChange(id, { 
+        messages: updatedMessages,
+        output: formatConversationOutput(updatedMessages)
       });
-
-      if (!agentWithDefaults.apiKeyId) {
-        console.warn('No API key configured for agent:', agentWithDefaults.name);
+    }
+  
+    setInputMessage('');
+    setIsProcessing(true);
+  
+    try {
+      // Get AI participants
+      const aiParticipants = participants.filter(p => p.type === 'ai');
+  
+      if (conversationMode === 'round-robin') {
+        for (const participant of aiParticipants) {
+          const response = await data.onSend?.(id, inputMessage, participant);
+          
+          if (response) {
+            const aiMessage = {
+              id: Date.now(),
+              senderId: participant.id,
+              senderName: participant.name,
+              role: participant.role?.type || 'assistant',
+              content: response,
+              timestamp: new Date().toISOString()
+            };
+  
+            updatedMessages.push(aiMessage);
+            
+            // Update state with new message
+            data.onChange?.(id, { 
+              messages: [...updatedMessages],
+              output: formatConversationOutput(updatedMessages)
+            });
+          }
+        }
+      } else {
+        // Handle free-form or other modes
+        const responses = await Promise.all(
+          aiParticipants.map(participant =>
+            data.onSend?.(id, inputMessage, participant)
+          )
+        );
+  
+        responses.forEach((response, index) => {
+          if (response) {
+            const aiMessage = {
+              id: Date.now() + index,
+              senderId: aiParticipants[index].id,
+              senderName: aiParticipants[index].name,
+              role: aiParticipants[index].role?.type || 'assistant',
+              content: response,
+              timestamp: new Date().toISOString()
+            };
+  
+            updatedMessages.push(aiMessage);
+          }
+        });
+  
+        // Update state with all messages
+        data.onChange?.(id, { 
+          messages: updatedMessages,
+          output: formatConversationOutput(updatedMessages)
+        });
       }
+    } catch (error) {
+      console.error('Error in conversation:', error);
+      setError(error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
+  // Updated formatConversationOutput function
+  const formatConversationOutput = (messages) => {
+    return messages.map(message => {
+      const prefix = message.senderName ? 
+        (message.role ? `${message.senderName} (${message.role}): ` : `${message.senderName}: `) :
+        '';
+      return `${prefix}${message.content}`;
+    }).join('\n\n');
+  };
 
-      const newAgents = [...participants, agentWithDefaults];
+  // Participant management
+  const handleParticipantConfig = useCallback((event, participant) => {
+    event.stopPropagation();
+    setSelectedParticipant(participant);
+    setShowParticipantConfig(true);
+  }, []);
+
+  const handleRemoveParticipant = useCallback((event, agentId) => {
+    event.stopPropagation();
+    if (data?.onChange) {
+      const newAgents = participants.filter(p => p.id !== agentId);
       data.onChange(id, { agents: newAgents });
     }
   }, [data, id, participants]);
 
-  // Remove a participant from the conversation
-  const handleRemoveParticipant = useCallback((event, agentId) => {
-    event.stopPropagation();
-    if (data?.onChange) {
-      const updatedParticipants = participants.filter(p => p.id !== agentId);
-      data.onChange(id, { agents: updatedParticipants });
-
-      if (selectedParticipant?.id === agentId) {
-        setSelectedParticipant(null);
-        setShowParticipantConfig(false);
-      }
-    }
-  }, [data, participants, selectedParticipant]);
-
-  // Update participant configuration
   const handleParticipantChange = useCallback((participantId, changes) => {
     if (data?.onChange) {
       const updatedParticipants = participants.map(p => {
@@ -125,402 +246,78 @@ const ConversationNode = ({ id, data, isConnectable }) => {
           return {
             ...p,
             ...changes,
-            apiKeyId: changes.apiKeyId || p.apiKeyId || data.apiKeyId,
-            modelConfig: {
-              ...p.modelConfig,
-              ...changes.modelConfig
-            }
+            model: changes.model || p.model,
+            apiKeyId: changes.apiKeyId || p.apiKeyId,
+            temperature: changes.temperature || p.temperature,
+            maxTokens: changes.maxTokens || p.maxTokens,
           };
         }
         return p;
       });
-
+      
       data.onChange(id, { agents: updatedParticipants });
     }
-  }, [data?.onChange, id, participants, data.apiKeyId]);
+  }, [data?.onChange, id, participants]);
 
-  // Message handling
-  const handleSendMessage = useCallback(async () => {
-    if (!inputMessage.trim() || isProcessing) return;
-
-    const configuredAgents = participants.filter(agent => 
-      agent.type === 'ai' ? (agent.apiKeyId && agent.modelConfig?.model) : true
-    );
-
-    if (configuredAgents.length === 0) {
-      setError('No properly configured agents. Please configure API keys and models for the AI agents.');
-      return;
-    }
-
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-      // Add user message
-      const userMessage = {
-        id: Date.now(),
-        content: inputMessage.trim(),
-        sender: 'User',
-        role: 'user',
-        timestamp: new Date().toISOString()
-      };
-
-      setMessages(prev => [...prev, userMessage]);
-      setInputMessage('');
-
-      // Process with active agents based on conversation mode
-      const aiAgents = configuredAgents.filter(agent => agent.type === 'ai');
-
-      switch (conversationMode) {
-        case 'round-robin':
-          for (const agent of aiAgents) {
-            await processAgentResponse(agent, [...messages, userMessage]);
-          }
-          break;
-
-        case 'moderated':
-          if (aiAgents.length > 0) {
-            const moderator = aiAgents[0];
-            const decision = await processModeratorDecision(moderator, [...messages, userMessage]);
-            for (const agentId of decision) {
-              const agent = aiAgents.find(a => a.id === agentId);
-              if (agent) {
-                await processAgentResponse(agent, [...messages, userMessage]);
-              }
-            }
-          }
-          break;
-
-        case 'free-form':
-        default:
-          await Promise.all(aiAgents.map(agent => 
-            processAgentResponse(agent, [...messages, userMessage])
-          ));
-          break;
-      }
-    } catch (error) {
-      console.error('Error in conversation:', error);
-      setError(error.message);
-    } finally {
-      setIsProcessing(false);
-      inputRef.current?.focus();
-    }
-  }, [inputMessage, isProcessing, messages, participants, conversationMode]);
-
-  // Process agent responses
-  const processAgent = async (agent, messageHistory) => {
-    try {
-      if (!agent.apiKeyId) {
-        throw new Error(`No API key configured for agent: ${agent.name}`);
-      }
-  
-      // Get the appropriate instructions based on agent configuration
-      let systemInstructions;
-      if (agent.instructions?.isUsingCustom && agent.instructions?.custom) {
-        systemInstructions = agent.instructions.custom;
-      } else {
-        // Regenerate instructions from current configuration
-        // This ensures instructions stay in sync with any personality/role/expertise changes
-        const config = generateAgentConfiguration({
-          personality: agent.personality || {},
-          role: agent.role || {},
-          expertise: agent.expertise || {}
-        });
-        systemInstructions = config.systemPrompt;
-      }
-  
-      // Add conversation context
-      const conversationContext = `You are participating in a ${conversationMode} conversation with multiple agents.`;
-      const fullInstructions = `${systemInstructions}\n\n${conversationContext}`;
-  
-      const messages = [
-        {
-          role: 'system',
-          content: fullInstructions
-        },
-        ...messageHistory.map(m => ({
-          role: m.role,
-          content: m.content
-        }))
-      ];
-  
-      const response = await callOpenAI(
-        agent.apiKeyId,
-        agent.modelConfig?.model || 'gpt-4o',
-        messages,
-        agent.modelConfig?.parameters?.temperature || 0.7,
-        agent.modelConfig?.parameters?.maxTokens || 2048
-      );
-  
-      return response;
-    } catch (error) {
-      console.error(`Error processing agent ${agent.name}:`, error);
-      throw error;
-    }
-  };
-  
-  // In AgentBuilder.jsx - ensure API key is included when creating new agents
-  const handleSave = async () => {
-    if (!validateName()) {
-      setActiveTab('info');
-      return;
-    }
-  
-    try {
-      setIsSaving(true);
-      
-      const agentConfig = {
-        id: selectedAgentId || `aiAgent-${Date.now()}`,
-        name: agentName.trim(),
-        type: 'aiAgent',
-        data: {
-          name: agentName.trim(),
-          type: 'ai',
-          personality,
-          role: {
-            ...role,
-            type: role.type === 'custom' ? role.customRole : role.type
-          },
-          expertise,
-          modelConfig: {
-            ...modelConfig,
-            model: modelConfig.model,
-            apiKeyId: modelConfig.apiKeyId, // Ensure API key is included
-            parameters: {
-              ...modelConfig.parameters
-            }
-          },
-          apiKeyId: modelConfig.apiKeyId // Also include at top level for compatibility
-        }
-      };
-  
-      console.log('Saving agent with configuration:', {
-        model: agentConfig.data.modelConfig.model,
-        apiKeyId: agentConfig.data.modelConfig.apiKeyId
-      });
-  
-      // Rest of the function...
-    } catch (error) {
-      console.error('Error saving agent:', error);
-      setNameError('Failed to save agent: ' + error.message);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Generate instructions for agents
-    const generateAgentInstructions = useCallback((agent) => {
-      // Get base system instructions
-      const baseInstructions = agent.systemInstructions || 'You are a helpful assistant.';
-      
-      // Add role context
-      const roleContext = `You are acting as ${getRoleDisplay(agent.role)}.`;
-      
-      // Add conversation mode context
-      const conversationContext = `You are participating in a ${conversationMode} conversation with multiple agents.`;
-      
-      // Combine all instructions
-      return `${baseInstructions}\n\n${roleContext}\n\n${conversationContext}`;
-    }, [conversationMode]);
-
-  // Handle key press events
-  const handleKeyPress = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  }, [handleSendMessage]);
-
-  // Process moderator decisions
-  const processModeratorDecision = async (moderator, messageHistory) => {
-    try {
-      const response = await fetch('http://localhost:3000/api/openai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKeyId: moderator.apiKeyId,
-          model: moderator.modelConfig?.model || 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a conversation moderator. Review the context and decide which agents should respond.
-              Available agents: ${participants.map(a => `${a.id} (${getRoleDisplay(a.role)})`).join(', ')}.
-              Respond with a JSON array of agent IDs that should participate.`
-            },
-            ...messageHistory.map(m => ({
-              role: m.role,
-              content: m.content
-            }))
-          ],
-          temperature: 0.3,
-          maxTokens: 100
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to get moderator decision');
-      
-      const data = await response.json();
-      try {
-        return JSON.parse(data.choices[0].message.content);
-      } catch {
-        return [];
-      }
-    } catch (error) {
-      console.error('Error in moderator decision:', error);
-      return [];
-    }
-  };
-
-  // Handle drag and drop functionality
-  const handleDropZoneDragOver = useCallback((event) => {
+  // Drag and drop handling
+  const handleDragOver = useCallback((event) => {
     event.preventDefault();
     event.stopPropagation();
-
+    
     let isValidDrag = false;
-
-    if (isDraggingNode && draggedNodeType) {
-      isValidDrag = true;
-    } else {
-      try {
-        const dragData = event.dataTransfer.getData('application/reactflow');
-        if (dragData) {
-          const parsedData = JSON.parse(dragData);
-          isValidDrag = parsedData.type === 'aiAgent' || parsedData.type === 'humanAgent';
-        }
-      } catch (error) {
-        console.log('Not a valid sidebar drag');
+    try {
+      const dragData = event.dataTransfer.getData('application/reactflow');
+      if (dragData) {
+        const parsedData = JSON.parse(dragData);
+        isValidDrag = parsedData.type === 'aiAgent' || parsedData.type === 'humanAgent';
       }
+    } catch (error) {
+      console.log('Not a valid drag');
     }
 
     if (isValidDrag) {
       setIsDropZoneActive(true);
       event.dataTransfer.dropEffect = 'move';
     }
-  }, [isDraggingNode, draggedNodeType]);
+  }, []);
 
-  const handleDropZoneDragLeave = useCallback((event) => {
+  const handleDragLeave = useCallback((event) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDropZoneActive(false);
   }, []);
 
-  const handleDropZoneDrop = useCallback((event) => {
+  const handleDrop = useCallback((event) => {
     event.preventDefault();
     event.stopPropagation();
+    setIsDropZoneActive(false);
 
     try {
-      let droppedData;
-      let sourceNodeId;
-
-      if (isDraggingNode && draggedNodeType) {
-        const draggedNode = reactFlowInstance.getNodes().find(n => n.selected);
-        if (draggedNode) {
-          droppedData = {
-            type: draggedNode.type,
-            data: draggedNode.data,
-            id: draggedNode.id
+      const dragData = JSON.parse(event.dataTransfer.getData('application/reactflow'));
+      if (dragData.type === 'aiAgent' || dragData.type === 'humanAgent') {
+        if (data?.onChange) {
+          const agentConfig = {
+            ...dragData.data,
+            id: `${dragData.type}-${Date.now()}`,
+            type: dragData.type === 'aiAgent' ? 'ai' : 'human'
           };
-          sourceNodeId = draggedNode.id;
+          
+          data.onChange(id, {
+            agents: [...participants, agentConfig]
+          });
         }
-      } else {
-        const dragData = event.dataTransfer.getData('application/reactflow');
-        if (dragData) {
-          droppedData = JSON.parse(dragData);
-        }
-      }
-
-      if (droppedData && (droppedData.type === 'aiAgent' || droppedData.type === 'humanAgent')) {
-        if (sourceNodeId) {
-          reactFlowInstance.deleteElements({ nodes: [{ id: sourceNodeId }] });
-        }
-
-        const agentConfig = {
-          ...droppedData.data,
-          id: `${droppedData.type}-${Date.now()}`,
-          type: droppedData.type === 'aiAgent' ? 'ai' : 'human'
-        };
-
-        console.log('Adding agent to conversation:', agentConfig);
-        handleAddParticipant(agentConfig);
       }
     } catch (error) {
       console.error('Error handling drop:', error);
-    } finally {
-      setIsDropZoneActive(false);
-      setIsDraggingNode(false);
-      setDraggedNodeType(null);
-      setDragSourceType(null);
     }
-  }, [isDraggingNode, draggedNodeType, reactFlowInstance, handleAddParticipant]);
+  }, [data, id, participants]);
 
   // Render functions
-  const DropZone = useCallback(() => (
-    <div
-      ref={dropZoneRef}
-      className={`drop-zone ${isDropZoneActive ? 'active-drop-target' : ''} ${
-        isDraggingNode ? 'node-drag-active' : ''
-      }`}
-      onDragOver={handleDropZoneDragOver}
-      onDragLeave={handleDropZoneDragLeave}
-      onDrop={handleDropZoneDrop}
-      data-nodetype="dropzone"
-    >
-      <div className="text-sm text-gray-500 text-center">
-        {isDropZoneActive ? (
-          <span className="text-blue-500 font-medium">Drop agent here</span>
-        ) : (
-          <span>Drag agents here from canvas or sidebar</span>
-        )}
-      </div>
-    </div>
-  ), [isDropZoneActive, isDraggingNode, handleDropZoneDragOver, handleDropZoneDragLeave, handleDropZoneDrop]);
-
-  // Message rendering
-  const renderMessage = useCallback((message) => {
-    const getMessageStyle = () => {
-      switch (message.role) {
-        case 'user':
-          return 'bg-blue-50 border-blue-200';
-        case 'assistant':
-          return 'bg-green-50 border-green-200';
-        case 'system':
-          return 'bg-gray-50 border-gray-200';
-        default:
-          return 'bg-white border-gray-200';
-      }
-    };
-
-    return (
-      <div
-        key={message.id}
-        className={`p-3 rounded-lg border mb-2 ${getMessageStyle()}`}
-      >
-        <div className="flex justify-between items-center mb-1">
-          <div className="flex items-center gap-2">
-            {message.role === 'assistant' ? (
-              <Bot className="w-4 h-4 text-green-500" />
-            ) : message.role === 'user' ? (
-              <User className="w-4 h-4 text-blue-500" />
-            ) : (
-              <MessageCircle className="w-4 h-4 text-gray-500" />
-            )}
-            <span className="text-sm font-medium">{message.sender}</span>
-          </div>
-          <span className="text-xs text-gray-500">
-            {new Date(message.timestamp).toLocaleTimeString()}
-          </span>
-        </div>
-        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-      </div>
-    );
-  }, []);
-
-  // Participant list rendering
   const renderParticipantList = useCallback(() => {
     return participants.map((agent) => (
       <div
         key={agent.id}
-        className="flex items-center justify-between bg-gray-50 p-2 rounded-md mb-2 cursor-move agent-item"
+        className="flex items-center justify-between bg-gray-50 p-2 rounded-md mb-2"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2">
@@ -532,18 +329,14 @@ const ConversationNode = ({ id, data, isConnectable }) => {
           )}
           <span className="text-sm font-medium">{agent.name}</span>
           <span className="text-xs text-gray-500">
-            ({getRoleDisplay(agent.role)})
+            ({agent.role?.type || 'No role defined'})
           </span>
         </div>
         <div className="flex gap-2">
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedParticipant(agent);
-              setShowParticipantConfig(true);
-            }}
+            onClick={(e) => handleParticipantConfig(e, agent)}
             title="Configure Agent"
           >
             <Settings2 className="w-4 h-4 text-gray-500" />
@@ -553,179 +346,218 @@ const ConversationNode = ({ id, data, isConnectable }) => {
             size="sm"
             onClick={(e) => handleRemoveParticipant(e, agent.id)}
             title="Remove Agent"
-            className="hover:bg-red-100 hover:text-red-500"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 text-gray-500" />
           </Button>
         </div>
       </div>
     ));
-  }, [participants, handleRemoveParticipant]);
+  }, [participants, handleParticipantConfig, handleRemoveParticipant]);
 
-  // Main render
+  const renderSettings = () => (
+    <Card className="mb-4">
+      <CardHeader>
+        <CardTitle className="text-base">Conversation Settings</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div>
+            <Label>Conversation Mode</Label>
+            <Select
+              value={conversationMode}
+              onChange={(e) => data?.onChange?.(id, { mode: e.target.value })}
+              className="mt-1"
+            >
+              <option value="free-form">Free-form</option>
+              <option value="round-robin">Round Robin</option>
+              <option value="moderated">Moderated</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Turn Management</Label>
+            <Select
+              value={turnManagement}
+              onChange={(e) => data?.onChange?.(id, { turnManagement: e.target.value })}
+              className="mt-1"
+            >
+              <option value="dynamic">Dynamic</option>
+              <option value="strict">Strict</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Context Handling</Label>
+            <Select
+              value={contextHandling}
+              onChange={(e) => data?.onChange?.(id, { contextHandling: e.target.value })}
+              className="mt-1"
+            >
+              <option value="cumulative">Cumulative</option>
+              <option value="window">Sliding Window</option>
+              <option value="summary">Summary Based</option>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="allowHuman"
+              checked={allowHumanParticipation}
+              onChange={(e) => data?.onChange?.(id, { 
+                allowHumanParticipation: e.target.checked 
+              })}
+              className="rounded border-gray-300"
+            />
+            <Label htmlFor="allowHuman">Allow Human Participation</Label>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <>
-      <div 
-        ref={nodeRef}
-        className={`conversation-node bg-white border-2 ${
-          isDropZoneActive ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-200'
-        } rounded-lg shadow-lg w-96 relative ${
-          isDraggingNode ? 'node-drag-active' : ''
-        }`}
-        onClick={(e) => e.stopPropagation()}
-        style={{ 
-          zIndex: isDropZoneActive ? 1000 : 1, 
-          transition: 'all 0.2s ease-in-out',
-          transform: isDropZoneActive ? 'scale(1.02)' : 'scale(1)'
-        }}
-      >
-        <Handle
-          type="target"
-          position={Position.Top}
-          style={{ background: '#555' }}
-          isConnectable={isConnectable}
-        />
+    <div 
+      ref={nodeRef}
+      className={`conversation-node bg-white border-2 ${
+        isDropZoneActive ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-200'
+      } rounded-lg shadow-lg relative`}
+      onClick={(e) => e.stopPropagation()}
+      style={{ 
+        zIndex: isDropZoneActive ? 1000 : 1, 
+        transition: 'all 0.2s ease-in-out',
+        transform: isDropZoneActive ? 'scale(1.02)' : 'scale(1)'
+      }}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={{ background: '#555' }}
+        isConnectable={isConnectable}
+      />
 
-        <div className="p-4">
-          {/* Header */}
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-gray-500" />
-              <h3 className="text-lg font-semibold">
-                {data?.label || 'Multi-Agent Conversation'}
-              </h3>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSettings(!showSettings)}
-              >
-                <Settings2 className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setExpanded(!expanded)}
-              >
-                {expanded ? (
-                  <ChevronUp className="w-4 h-4" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
-                )}
-              </Button>
+      <div className="p-4">
+{/* Header */}
+<div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-gray-500" />
+            <h3 className="text-lg font-semibold">
+              {data?.label || 'Multi-Agent Conversation'}
+            </h3>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <Settings2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Settings Panel */}
+        {showSettings && renderSettings()}
+
+        {/* Participants Section */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <Label className="font-medium">Participants</Label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowParticipantMenu(!showParticipantMenu)}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Participant
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {renderParticipantList()}
+          </div>
+
+          {/* Drop Zone */}
+          <div
+            ref={dropZoneRef}
+            className={`drop-zone ${isDropZoneActive ? 'active-drop-target' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <div className="text-sm text-gray-500 text-center">
+              {isDropZoneActive ? (
+                <span className="text-blue-500 font-medium">Drop agent here</span>
+              ) : (
+                <span>Drag agents here from canvas or sidebar</span>
+              )}
             </div>
           </div>
 
-          {/* Settings Panel */}
-          {showSettings && (
-            <Card className="mb-4">
-              <CardHeader>
-                <CardTitle className="text-base">Conversation Settings</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Conversation Mode</Label>
-                    <Select
-                      value={conversationMode}
-                      onChange={(e) => data?.onChange?.(id, { mode: e.target.value })}
-                      className="mt-1"
-                    >
-                      <option value="free-form">Free-form</option>
-                      <option value="round-robin">Round Robin</option>
-                      <option value="moderated">Moderated</option>
-                    </Select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="checkbox"
-                      id="allowHuman"
-                      checked={allowHumanParticipation}
-                      onChange={(e) => data?.onChange?.(id, { 
-                        allowHumanParticipation: e.target.checked 
-                      })}
-                    />
-                    <Label htmlFor="allowHuman">Allow Human Participation</Label>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Participants Section */}
-          <div className="mb-4">
-            <div className="flex justify-between items-center mb-2">
-              <Label className="font-medium">Participants</Label>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowParticipantMenu(!showParticipantMenu)}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Add Participant
-              </Button>
+          {error && (
+            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-sm">{error}</span>
+              </div>
             </div>
-
-            <div className="space-y-2">
-              {renderParticipantList()}
-            </div>
-
-            <DropZone />
-
-            {/* Error Display */}
-            {error && (
-              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center gap-2 text-red-600">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm">{error}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Message Area */}
-          {expanded && (
-            <>
-              <div className="border rounded-lg mb-4">
-                <div className="max-h-60 overflow-y-auto p-3">
-                  {messages.map(renderMessage)}
-                  <div ref={messagesEndRef} />
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Input
-                  ref={inputRef}
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Type your message..."
-                  disabled={isProcessing}
-                  className="flex-grow"
-                />
-                <Button
-                  onClick={handleSendMessage}
-                  disabled={isProcessing || !inputMessage.trim()}
-                >
-                  {isProcessing ? (
-                    <Loader className="w-4 h-4 animate-spin" />
-                  ) : (
-                    'Send'
-                  )}
-                </Button>
-              </div>
-            </>
           )}
         </div>
 
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          style={{ background: '#555' }}
-          isConnectable={isConnectable}
-        />
+        {/* Message Area */}
+        {expanded && (
+          <>
+            <div className="border rounded-lg mb-4">
+              <div className="max-h-96 overflow-y-auto p-3 space-y-2">
+                {messages.map((message, index) => (
+                  <Message 
+                    key={message.id || index}
+                    message={message}
+                    participants={participants}
+                  />
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && !isProcessing && handleSendMessage()}
+                placeholder="Type your message..."
+                disabled={isProcessing}
+                className="flex-grow"
+              />
+              <Button
+                onClick={handleSendMessage}
+                disabled={isProcessing || !inputMessage.trim()}
+              >
+                {isProcessing ? (
+                  <Loader className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Send'
+                )}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
+
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={{ background: '#555' }}
+        isConnectable={isConnectable}
+      />
 
       {/* Property Panel for participant configuration */}
       {showParticipantConfig && selectedParticipant && (
@@ -746,7 +578,7 @@ const ConversationNode = ({ id, data, isConnectable }) => {
           apiKeys={data?.apiKeys}
         />
       )}
-    </>
+    </div>
   );
 };
 
